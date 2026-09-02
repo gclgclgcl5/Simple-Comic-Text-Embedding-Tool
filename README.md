@@ -59,9 +59,15 @@ python -m http.server 8080
 | --- | --- |
 | 构建命令 | （留空） |
 | 构建输出目录 | `/`（仓库根目录） |
-| 入口 | `index.html`（根路径 `https://xxx.pages.dev/` 直接打开） |
+| 入口 | `index.html`（根路径 `https://xxx.pages.dev/` 自动打开，**无需** `_redirects`） |
 
-根目录已包含 `_redirects`（`/ /index.html 200`），确保访问根域名时正确返回入口页。
+> 根目录已有 `index.html` 时，Cloudflare 会自动将其作为默认首页；**不要**添加 `/ /index.html 200` 重定向规则，否则会触发无限循环报错（code 100324）。
+
+若使用 Wrangler CLI 本地部署，请从仓库根目录执行，且已通过 `.wranglerignore` 排除 `.git` 等目录：
+
+```bash
+npx wrangler pages deploy . --project-name=simple-comic-text-embedding-tool
+```
 
 > ⚠️ 注意：请保持 `css/`、`js/`、`字体样式/`、`index.html` 的相对目录结构不变；字体路径相对于 HTML 入口解析。修改入口页时请同步更新 `index.html` 与 `双击我开始嵌字.html`。
 
@@ -99,7 +105,7 @@ python -m http.server 8080
 image-text-tool-main/
 ├── index.html                 # Web 入口（Cloudflare Pages 等）
 ├── 双击我开始嵌字.html          # 本地双击入口（与 index.html 相同）
-├── _redirects                 # Cloudflare Pages 根路径重定向
+├── .wranglerignore            # Wrangler CLI 部署时排除 .git 等
 ├── css/
 │   ├── style.css          # 样式入口（@import 汇总）
 │   ├── tokens.css         # 设计变量

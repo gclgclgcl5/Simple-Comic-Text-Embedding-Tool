@@ -4,6 +4,14 @@
 
 ---
 
+## [v2.5.4] - 2026-09-02
+
+### 修复
+- **Cloudflare 部署**：移除 `_redirects`（`/ /index.html 200` 在已有 `index.html` 时会触发无限循环，报错 code 100324）
+- 新增 `.wranglerignore`，Wrangler CLI 部署时排除 `.git` 目录
+
+---
+
 ## [v2.5.3] - 2026-09-02
 
 ### 部署
