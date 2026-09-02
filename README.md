@@ -1,8 +1,12 @@
 # 图片嵌字工具（Image Text Tool）
 
-一个**纯前端、零依赖**的本地图片嵌字工具：批量上传图片 → 在图片任意位置添加文字框（颜色 / 字号 / 字体 / 竖排 / 描边均可自由设置）→ 一键导出全部图片。
+一个**纯前端、零依赖**的图片嵌字工具：批量上传图片 → 在图片任意位置添加文字框（颜色 / 字号 / 字体 / 竖排 / 描边均可自由设置）→ 一键导出全部图片。
 
-- 纯 HTML + CSS + JavaScript，**双击即可运行**，无需安装、无需联网、无需构建工具
+**在线使用（推荐）：** [https://simple-comic-text-embedding-tool.pages.dev/](https://simple-comic-text-embedding-tool.pages.dev/)
+
+打开浏览器即可使用，无需下载；图片与编辑数据仍保存在本地浏览器，不会上传到服务器。
+
+- 纯 HTML + CSS + JavaScript，也可**下载后双击运行**，无需安装、无需构建工具
 - 所有图片与文字处理都在**本地浏览器**完成，数据不会上传到任何服务器
 - 内置 3 套免费商用字体（4 个文件），开箱即用；也可自行上传 `ttf / otf / woff / woff2 / zip` 字体（写入 IndexedDB，刷新后自动恢复）
 
@@ -43,9 +47,11 @@
 
 ## 🚀 快速开始
 
-**方式一（本地）**：直接双击打开 `双击我开始嵌字.html`（与 `index.html` 内容相同）
+**方式一（在线，推荐）**：打开 [https://simple-comic-text-embedding-tool.pages.dev/](https://simple-comic-text-embedding-tool.pages.dev/) 即可使用。
 
-**方式二（本地静态服务）**：
+**方式二（本地）**：直接双击打开 `双击我开始嵌字.html`（与 `index.html` 内容相同）
+
+**方式三（本地静态服务）**：
 
 ```bash
 cd image-text-tool-main
@@ -53,13 +59,14 @@ python -m http.server 8080
 # 浏览器打开 http://localhost:8080/ 或 http://localhost:8080/index.html
 ```
 
-**方式三（Cloudflare Pages）**：将仓库根目录作为静态站点部署即可，无需构建步骤。
+**方式四（Cloudflare Pages）**：将仓库根目录作为静态站点部署即可，无需构建步骤。
 
 | 配置项 | 值 |
 | --- | --- |
 | 构建命令 | （留空） |
 | 构建输出目录 | `/`（仓库根目录） |
-| 入口 | `index.html`（根路径 `https://xxx.pages.dev/` 自动打开，**无需** `_redirects`） |
+| 入口 | `index.html`（根路径自动打开，**无需** `_redirects`） |
+| 在线演示 | [simple-comic-text-embedding-tool.pages.dev](https://simple-comic-text-embedding-tool.pages.dev/) |
 
 > 根目录已有 `index.html` 时，Cloudflare 会自动将其作为默认首页；**不要**添加 `/ /index.html 200` 重定向规则，否则会触发无限循环报错（code 100324）。
 

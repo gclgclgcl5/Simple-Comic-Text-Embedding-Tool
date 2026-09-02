@@ -4,6 +4,13 @@
 
 ---
 
+## [v2.5.5] - 2026-09-02
+
+### 文档
+- **README**：添加在线演示地址 [simple-comic-text-embedding-tool.pages.dev](https://simple-comic-text-embedding-tool.pages.dev/)
+
+---
+
 ## [v2.5.4] - 2026-09-02
 
 ### 修复
