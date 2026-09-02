@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="图片嵌字工具：批量上传图片，自由添加文字框，支持竖排、自定义字体、颜色与字号，一键导出全部图片。">
+<title>图片嵌字工具</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <button type="button" class="brand-mark" id="brandOwlBtn" aria-label="猫头鹰" title="">🦉</button>
+    <audio id="owlThemeAudio" src="css/owl-theme.mp3" preload="none"></audio>
+    <span>嵌字工具</span>
+  </div>
+  <div class="header-center">
+    <div class="segmented mode-switch">
+      <button type="button" id="modeTextBtn" class="mode-btn active">嵌字</button>
+      <button type="button" id="modeDrawBtn" class="mode-btn">画图</button>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button type="button" class="btn btn-mini" id="clearCacheBtn" title="清除本地保存的图片、编辑与上传字体">清除缓存</button>
+    <button type="button" class="icon-btn" id="themeToggleBtn" title="切换主题" aria-label="切换主题">
+      <svg class="icon icon-sun" aria-hidden="true"><use href="#icon-sun"/></svg>
+      <svg class="icon icon-moon" hidden aria-hidden="true"><use href="#icon-moon"/></svg>
+    </button>
+    <button type="button" class="icon-btn" id="helpBtn" title="使用帮助 (?)" aria-label="使用帮助">
+      <svg class="icon" aria-hidden="true"><use href="#icon-help"/></svg>
+    </button>
+    <label class="btn" title="支持多选，也可以直接把图片拖进窗口">
+      <svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg>
+      上传图片
+      <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    </label>
+  </div>
+</header>
+
+<main class="app-main">
+  <aside class="gallery-panel" id="galleryPanel" data-collapsible>
+    <div class="panel-head">
+      <span class="panel-head-title">图库</span>
+      <button type="button" class="icon-btn" id="sidebarCollapseGallery" title="折叠图库" aria-label="折叠图库">
+        <svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg>
+      </button>
+    </div>
+    <div class="gallery-toolbar">
+      <label><input type="checkbox" id="checkAll" class="field-checkbox"> 全选</label>
+      <div class="head-right">
+        <button class="btn-mini" id="clearAllBtn" title="一键清空所有已上传图片">清空</button>
+        <span id="selInfo">0 / 0</span>
+      </div>
+    </div>
+    <div id="gallery">
+      <div class="empty-side" id="emptySide">还没有图片<br>点击上方「上传图片」<br>或把图片、字体拖进窗口</div>
+    </div>
+    <div class="gallery-footer">
+      <button class="btn primary btn-block" id="exportBtn" disabled title="将所选图片合成为一个 ZIP 下载">
+        <svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>
+        导出所选 (0)
+      </button>
+    </div>
+  </aside>
+
+  <section class="workspace" id="editor">
+    <div class="workspace-bar">
+      <div class="workspace-bar-left">
+        <span class="name" id="currentName">未选择图片</span>
+      </div>
+      <div class="workspace-tools">
+        <button class="btn" id="addTextBtn" disabled>
+          <svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>
+          添加文字
+        </button>
+        <button class="btn" id="fontUploadBtn" title="支持 ttf / otf / woff / woff2 / zip（自动解压找字体）">
+          <svg class="icon" aria-hidden="true"><use href="#icon-font"/></svg>
+          上传字体
+        </button>
+        <input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2,.zip" multiple hidden>
+        <button class="btn" id="exportOneBtn" disabled>
+          <svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>
+          导出当前
+        </button>
+      </div>
+    </div>
+    <div id="canvasArea">
+      <div id="stage" hidden>
+        <img id="stageImg" alt="">
+        <canvas id="drawRaster"></canvas>
+        <div id="drawShapeLayer"></div>
+      </div>
+      <div id="emptyEditor">
+        <div class="dropzone" id="dropzone">
+          <svg class="dropzone-icon" aria-hidden="true"><use href="#icon-upload"/></svg>
+          <div class="dropzone-title">拖拽图片或字体到此处</div>
+          <div class="dropzone-desc">图片：JPG、PNG、WebP 等（可多选）<br>字体：TTF、OTF、WOFF、ZIP<br>也可点击上方「上传图片」或「上传字体」</div>
+        </div>
+        <p class="empty-hint">在左侧选择图片后开始嵌字，按 <kbd>?</kbd> 查看帮助</p>
+      </div>
+    </div>
+  </section>
+
+  <aside class="props-panel" id="propsPanel" hidden data-collapsible>
+    <div class="panel-head">
+      <span class="panel-head-title">属性</span>
+      <button type="button" class="icon-btn" id="sidebarCollapseProps" title="折叠属性面板" aria-label="折叠属性面板">
+        <svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg>
+      </button>
+    </div>
+    <div class="props-hint" id="propsHint">
+      <span id="propsHintText">默认样式 — 新添加的文字框将使用以下设置</span>
+    </div>
+    <div class="props-panel-body">
+      <div id="textProps">
+        <div id="boxToolbar">
+          <div class="panel-section">
+            <div class="panel-section-title">颜色</div>
+            <div class="color-row">
+              <span class="color-pick" title="文字颜色">
+                <button type="button" class="color-swatch" id="tbColorBtn" aria-label="文字颜色"></button>
+                <input type="color" id="tbColor" value="#ffffff">
+                <div class="color-pop" id="tbColorPop" hidden>
+                  <div class="color-pop-hd">常用颜色</div>
+                  <div class="color-chips" id="tbColorChips"></div>
+                  <button type="button" class="color-custom" id="tbColorMore">自定义颜色</button>
+                </div>
+              </span>
+              <button type="button" class="color-eyedropper" id="tbColorEyedropper" title="取色器" aria-label="文字取色器">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-eyedropper"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">样式预设</div>
+            <div class="text-preset-group">
+              <div class="preset-slot text-preset empty" data-i="0" data-char="故">
+                <button type="button" class="preset-hit" aria-label="样式预设 故"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot text-preset empty" data-i="1" data-char="伦">
+                <button type="button" class="preset-hit" aria-label="样式预设 伦"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot text-preset empty" data-i="2" data-char="德">
+                <button type="button" class="preset-hit" aria-label="样式预设 德"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot text-preset empty" data-i="3" data-char="里">
+                <button type="button" class="preset-hit" aria-label="样式预设 里"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">字号</div>
+            <span class="size-ctrl stepper" title="字体大小（可直接输入数值，或点 ± 调整）">
+              <button type="button" class="sz-btn stepper-btn" id="tbSizeMinus" title="减小字号">−</button>
+              <input type="number" id="tbSize" class="stepper-input" min="6" step="1" value="20">
+              <span class="size-unit stepper-unit">px</span>
+              <button type="button" class="sz-btn stepper-btn" id="tbSizePlus" title="增大字号">+</button>
+            </span>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">字体</div>
+            <label title="文字字体"><select id="tbFont" class="field-select"></select></label>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">样式</div>
+            <div class="panel-section-row">
+              <button type="button" class="fmt-btn" id="tbBold" title="加粗（Ctrl+B）" aria-pressed="false">B</button>
+              <label class="toggle" title="竖排（从左到右）">
+                <input type="checkbox" id="tbVert">
+                竖排
+              </label>
+            </div>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">描边</div>
+            <div class="panel-section-stack">
+              <label class="toggle" title="文字描边">
+                <input type="checkbox" id="tbStroke">
+                启用描边
+              </label>
+              <div class="panel-section-row color-row" data-stroke title="描边颜色">
+                <span class="color-pick">
+                  <button type="button" class="color-swatch" id="tbStrokeColorBtn" aria-label="描边颜色"></button>
+                  <input type="color" id="tbStrokeColor" value="#000000">
+                  <div class="color-pop" id="tbStrokeColorPop" hidden>
+                    <div class="color-pop-hd">常用颜色</div>
+                    <div class="color-chips" id="tbStrokeColorChips"></div>
+                    <button type="button" class="color-custom" id="tbStrokeColorMore">自定义颜色</button>
+                  </div>
+                </span>
+                <button type="button" class="color-eyedropper" id="tbStrokeColorEyedropper" title="取色器" aria-label="描边取色器">
+                  <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-eyedropper"/></svg>
+                </button>
+              </div>
+              <label class="stroke-row" data-stroke title="描边粗细">
+                <span style="color:var(--muted);font-size:13px">粗细</span>
+                <input type="range" id="tbStrokeW" class="field-range" min="2" max="20" step="1" value="8">
+                <span class="stroke-val" id="tbStrokeVal">8%</span>
+              </label>
+            </div>
+          </div>
+          <div class="panel-section props-actions">
+            <button type="button" class="btn-danger" id="tbDelBtn" title="删除文字框" disabled>
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-trash"/></svg>
+              删除文字框
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="drawProps" hidden>
+        <div id="drawToolbar">
+          <div class="panel-section">
+            <div class="panel-section-title">工具</div>
+            <div class="draw-tools-row">
+              <button type="button" class="draw-tool on" data-tool="brush" title="画笔">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-brush"/></svg>
+              </button>
+              <button type="button" class="draw-tool" data-tool="eraser" title="橡皮擦">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-eraser"/></svg>
+              </button>
+              <button type="button" class="draw-tool" data-tool="rect" title="矩形">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rect"/></svg>
+              </button>
+              <button type="button" class="draw-tool" data-tool="ellipse" title="椭圆">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-ellipse"/></svg>
+              </button>
+              <button type="button" class="draw-tool" data-tool="eyedropper" title="取色器">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-eyedropper"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">颜色</div>
+            <span class="color-pick" title="画图颜色">
+              <button type="button" class="color-swatch" id="drawColorBtn" aria-label="画图颜色"></button>
+              <input type="color" id="drawColor" value="#ffffff">
+              <div class="color-pop" id="drawColorPop" hidden>
+                <div class="color-pop-hd">常用颜色</div>
+                <div class="color-chips" id="drawColorChips"></div>
+                <button type="button" class="color-custom" id="drawColorMore">自定义颜色</button>
+              </div>
+            </span>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">图形预设</div>
+            <div class="shape-preset-group">
+              <div class="preset-slot shape-preset empty" data-i="0">
+                <button type="button" class="preset-hit preset-hit-shape" aria-label="图形预设 1"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot shape-preset empty" data-i="1">
+                <button type="button" class="preset-hit preset-hit-shape" aria-label="图形预设 2"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot shape-preset empty" data-i="2">
+                <button type="button" class="preset-hit preset-hit-shape" aria-label="图形预设 3"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot shape-preset empty" data-i="3">
+                <button type="button" class="preset-hit preset-hit-shape" aria-label="图形预设 4"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot shape-preset empty" data-i="4">
+                <button type="button" class="preset-hit preset-hit-shape" aria-label="图形预设 5"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+              <div class="preset-slot shape-preset empty" data-i="5">
+                <button type="button" class="preset-hit preset-hit-shape" aria-label="图形预设 6"></button>
+                <button type="button" class="preset-remove" aria-label="删除预设" hidden>×</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">粗细</div>
+            <label id="drawBrushSizeWrap" class="draw-size" title="画笔粗细">
+              <span>画笔</span>
+              <input type="range" id="drawBrushSize" class="field-range" min="4" max="80" value="12">
+            </label>
+            <label id="drawEraserSizeWrap" class="draw-size" title="橡皮粗细" hidden>
+              <span>橡皮</span>
+              <input type="range" id="drawEraserSize" class="field-range" min="8" max="100" value="20">
+            </label>
+          </div>
+          <div class="panel-section">
+            <div class="panel-section-title">历史</div>
+            <div class="draw-hist-row">
+              <button type="button" class="draw-hist" id="drawUndoBtn" title="撤销 Ctrl+Z" disabled>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-undo"/></svg>
+                撤销
+              </button>
+              <button type="button" class="draw-hist" id="drawRedoBtn" title="重做 Ctrl+Y" disabled>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-redo"/></svg>
+                重做
+              </button>
+            </div>
+          </div>
+          <div class="panel-section props-actions">
+            <button type="button" class="btn-danger" id="drawDelBtn" title="删除选中图形" disabled>
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-trash"/></svg>
+              删除图形
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<dialog id="helpModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">使用帮助</span>
+      <button type="button" class="icon-btn" id="helpModalClose" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <h3>Created by 故伦德里</h3>
+      <h3>基本流程</h3>
+      <ol>
+        <li>上传图片：点击「上传图片」，或把图片拖进窗口（支持多选）</li>
+        <li>上传字体：点击「上传字体」，或把 TTF / OTF / WOFF / ZIP 字体文件拖进窗口</li>
+        <li>选择图片：点左侧缩略图进入编辑区</li>
+        <li>添加文字：双击图片任意位置，或点「添加文字」</li>
+        <li>编辑文字：选中文字框后，在文字区内直接点击输入、拖选文字</li>
+        <li>取色：点颜色旁的取色器按钮，再在图片上点击吸取颜色（文字色/描边色）</li>
+        <li>移动文字框：拖动顶部条，或左/右/底边距条</li>
+        <li>缩放文字框：拖动八点手柄（横排）</li>
+        <li>设置样式：在右侧属性面板设置颜色、字号、字体、竖排、描边</li>
+        <li>导出：勾选要导出的图片，点「导出所选」下载 ZIP；或点「导出当前」单张导出</li>
+      </ol>
+      <h3>模式说明</h3>
+      <ul>
+        <li><strong>嵌字模式</strong>：选中文字框后在右侧修改样式；无选中时可设置默认样式</li>
+        <li><strong>画图模式</strong>：用画笔或形状遮盖原图文字，再切换回嵌字模式添加文字</li>
+        <li><strong>样式预设</strong>（嵌字面板）：选中文字框后点空白槽保存；点有内容槽套用到选中文字框；× 删除</li>
+        <li><strong>图形预设</strong>（画图面板）：选中图形后点空白槽保存；点有内容槽在图片中心插入；× 删除</li>
+      </ul>
+      <h3>快捷键</h3>
+      <table>
+        <tr><th>按键</th><th>功能</th></tr>
+        <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>删除选中的文字框（嵌字模式）或图形（画图模式，需先选中矩形/椭圆）</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>取消取色 / 取消选中文字框（嵌字模式）</td></tr>
+        <tr><td><kbd>Ctrl+B</kbd></td><td>加粗（嵌字模式，需选中文字框）</td></tr>
+        <tr><td><kbd>Ctrl+Z</kbd></td><td>撤销（嵌字：文字操作；画图：画笔/形状）</td></tr>
+        <tr><td><kbd>Ctrl+Y</kbd> / <kbd>Ctrl+Shift+Z</kbd></td><td>重做（嵌字：文字操作；画图：画笔/形状）</td></tr>
+        <tr><td><kbd>?</kbd></td><td>打开帮助</td></tr>
+      </table>
+      <h3>字体</h3>
+      <p style="color:var(--muted);margin-top:8px">内置字体自动加载自「字体样式」目录；上传的自定义字体会写入 IndexedDB，刷新后自动恢复。点击顶栏「清除缓存」可一并删除。</p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn primary" id="helpModalOk">知道了</button>
+    </div>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+<div id="mirror"></div>
+
+<svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true">
+  <symbol id="icon-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+  <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="icon-font" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="icon-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></symbol>
+  <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+  <symbol id="icon-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></symbol>
+  <symbol id="icon-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="icon-brush" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 9.06a2 2 0 1 1 2.83 2.83l-8.49 8.49a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83z"/><path d="M21.61 11.61a8 8 0 0 0-11.22-11.22l3.54 3.54"/></symbol>
+  <symbol id="icon-eraser" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16l11-11 5 5-9 9"/><path d="M6.5 17.5l2-2"/></symbol>
+  <symbol id="icon-rect" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="0"/></symbol>
+  <symbol id="icon-ellipse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="10" ry="7"/></symbol>
+  <symbol id="icon-eyedropper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22l1-1h3l9-9"/><path d="M15 6l3 3"/><path d="M8 13l-5 5a2 2 0 0 0 2.83 2.83L11 16"/></symbol>
+  <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></symbol>
+  <symbol id="icon-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
+</svg>
+
+<script src="js/zip.js" defer></script>
+<script src="js/core/utils.js" defer></script>
+<script src="js/core/state.js" defer></script>
+<script src="js/core/storage.js" defer></script>
+<script src="js/core/dom.js" defer></script>
+<script src="js/ui.js" defer></script>
+<script src="js/fonts.js" defer></script>
+<script src="js/gallery.js" defer></script>
+<script src="js/editor.js" defer></script>
+<script src="js/core/color-pick.js" defer></script>
+<script src="js/toolbar.js" defer></script>
+<script src="js/draw.js" defer></script>
+<script src="js/draw-toolbar.js" defer></script>
+<script src="js/shape-presets.js" defer></script>
+<script src="js/export.js" defer></script>
+<script src="js/main.js" defer></script>
+</body>
+</html>
