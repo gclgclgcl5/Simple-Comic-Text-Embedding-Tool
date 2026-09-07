@@ -74,9 +74,14 @@
         const lines = wrapText(t.text, fs, innerW, ctx);
         const lh = fs * 1.25;
         const cx = t.x * img.w, cy = t.y * img.h;
+        const ang = ((typeof t.rotation === 'number' ? t.rotation : 0) * Math.PI) / 180;
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (ang) ctx.rotate(ang);
         ctx.textBaseline = 'middle';
-        const y0 = cy - (lines.length * lh) / 2 + lh / 2;
-        lines.forEach((ln, i) => { if (!ln) return; paintGlyph(ctx, ln, cx, y0 + i * lh, t, fs); });
+        const y0 = -((lines.length - 1) * lh) / 2;
+        lines.forEach((ln, i) => { if (!ln) return; paintGlyph(ctx, ln, 0, y0 + i * lh, t, fs); });
+        ctx.restore();
       }
     }
   }

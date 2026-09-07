@@ -7,7 +7,8 @@
   const {
     stage, tbColor, tbColorBtn, tbStrokeColor, tbStrokeColorBtn,
     tbColorEyedropper, tbStrokeColorEyedropper,
-    tbSizeMinus, tbSize, tbSizePlus, tbFont, tbBold, tbVert, tbStroke, tbStrokeW, tbStrokeVal
+    tbSizeMinus, tbSize, tbSizePlus, tbFont, tbBold, tbVert, tbStroke, tbStrokeW, tbStrokeVal,
+    tbRotateStart, tbRotateExit, tbRotateHint, tbRotMinus, tbRot, tbRotPlus, tbDelBtn
   } = App.Dom;
 
   let textColorPick, strokeColorPick;
@@ -175,20 +176,23 @@
 
   function presetTitle(p, char) {
     if (!p) return '点空白槽保存选中文字样式 · 点有内容套用 · × 删除';
+    const rot = typeof p.rotation === 'number' && p.rotation ? (' · ' + Math.round(p.rotation) + '°') : '';
     return '点一下套用到选中文字框\n样例字「' + char + '」· ' + p.fontFamily
-      + ' · ' + p.color + ' · 字号 ' + Math.round(p.fontPct * 100) + '%';
+      + ' · ' + p.color + ' · 字号 ' + Math.round(p.fontPct * 100) + '%' + rot;
   }
 
   function snapFromText(t) {
+    const vertical = !!t.vertical;
     return {
       color: t.color,
       fontPct: t.fontPct,
       fontFamily: t.fontFamily || State.DEFAULT_FONT,
       bold: !!t.bold,
-      vertical: !!t.vertical,
+      vertical,
       stroke: !!t.stroke,
       strokeColor: t.strokeColor || '#000000',
-      strokePct: t.strokePct || 0.08
+      strokePct: t.strokePct || 0.08,
+      rotation: vertical ? 0 : App.Editor.getTextRotation(t)
     };
   }
 
@@ -205,6 +209,9 @@
     el.style.fontWeight = '400';
     el.style.writingMode = p.vertical ? 'vertical-lr' : 'horizontal-tb';
     el.style.textOrientation = p.vertical ? 'upright' : 'mixed';
+    const rot = (!p.vertical && typeof p.rotation === 'number') ? p.rotation : 0;
+    el.style.transformOrigin = 'center center';
+    el.style.transform = rot ? ('rotate(' + rot + 'deg)') : '';
     const boldW = Math.max(0.5, fs * BOLD_RATIO);
     if (p.stroke) {
       el.style.webkitTextStroke = Math.max(0.5, p.strokePct * fs) + 'px ' + p.strokeColor;
@@ -267,6 +274,9 @@
     t.stroke = p.stroke;
     t.strokeColor = p.strokeColor;
     t.strokePct = p.strokePct;
+    t.rotation = p.vertical ? 0 : App.Editor.normalizeRotation(
+      typeof p.rotation === 'number' ? p.rotation : 0
+    );
     syncToolbarFromText(t);
     syncBoxFor(t);
     scheduleEdit();
@@ -302,6 +312,72 @@
     });
   }
 
+  function syncAngleInput(t) {
+    if (!tbRot) return;
+    if (!t) t = selectedText();
+    if (!t || t.vertical) {
+      tbRot.value = t && t.vertical ? '0' : '0';
+      return;
+    }
+    const deg = App.Editor.getDisplayRotation
+      ? App.Editor.getDisplayRotation(t)
+      : App.Editor.getTextRotation(t);
+    tbRot.value = String(Math.round(deg));
+  }
+
+  function applyRotationDeg(deg, opts) {
+    const t = selectedText();
+    if (!t || t.vertical) return;
+    const next = App.Editor.normalizeRotation(deg);
+    if (App.Editor.isRotating()) {
+      App.Editor.setRotateDraft(next);
+      syncAngleInput(t);
+      return;
+    }
+    const prev = App.Editor.getTextRotation(t);
+    if (next === prev) {
+      syncAngleInput(t);
+      return;
+    }
+    if (opts && opts.debounced) App.Editor.pushHistoryDebounced();
+    else App.Editor.pushHistory();
+    t.rotation = next;
+    syncBoxFor(t);
+    syncAngleInput(t);
+    scheduleEdit();
+  }
+
+  function syncRotateControls() {
+    const t = selectedText();
+    const rotating = App.Editor && App.Editor.isRotating && App.Editor.isRotating();
+    if (tbRotateStart) {
+      tbRotateStart.hidden = !!rotating;
+      tbRotateStart.disabled = !t || !!t.vertical || !!rotating;
+      tbRotateStart.title = t && t.vertical
+        ? '竖排文字不支持旋转'
+        : '进入旋转模式，拖动文字框绕中心旋转';
+    }
+    if (tbRotateExit) tbRotateExit.hidden = !rotating;
+    if (tbRotateHint) tbRotateHint.hidden = !rotating;
+
+    const angleOk = !!t && !t.vertical;
+    [tbRotMinus, tbRot, tbRotPlus].forEach(el => {
+      if (el) el.disabled = !angleOk;
+    });
+    syncAngleInput(t);
+
+    const lock = !!rotating;
+    [tbSizeMinus, tbSize, tbSizePlus, tbFont, tbBold, tbVert, tbStroke, tbStrokeW,
+      tbColorBtn, tbStrokeColorBtn, tbColorEyedropper, tbStrokeColorEyedropper].forEach(el => {
+      if (!el) return;
+      el.disabled = lock;
+    });
+    if (tbDelBtn) tbDelBtn.disabled = lock || !State.selectedTextId;
+    document.querySelectorAll('.text-preset .preset-hit, .text-preset .preset-remove').forEach(el => {
+      el.disabled = lock;
+    });
+  }
+
   function syncToolbarFromText(t) {
     tbColor.value = t.color;
     textColorPick.syncSwatch();
@@ -315,6 +391,7 @@
     strokeColorPick.syncSwatch();
     tbStrokeW.value = Math.round((t.strokePct || 0.08) * 100);
     tbStrokeVal.textContent = Math.round((t.strokePct || 0.08) * 100) + '%';
+    syncRotateControls();
   }
 
   function syncDefaultStylePanel() {
@@ -331,6 +408,7 @@
     strokeColorPick.syncSwatch();
     tbStrokeW.value = Math.round((ls.strokePct || 0.08) * 100);
     tbStrokeVal.textContent = Math.round((ls.strokePct || 0.08) * 100) + '%';
+    syncRotateControls();
   }
 
   function initColorPicks() {
@@ -345,20 +423,75 @@
   }
 
   function bindToolbarEvents() {
+    if (tbRotateStart) {
+      tbRotateStart.addEventListener('click', () => {
+        if (App.Editor.startRotate()) toast('旋转模式：拖动文字框调整角度');
+      });
+    }
+    if (tbRotateExit) {
+      tbRotateExit.addEventListener('click', () => {
+        App.Editor.abortRotateIfNeeded();
+        toast('已退出旋转模式');
+      });
+    }
+
+    if (tbRotMinus) {
+      tbRotMinus.addEventListener('click', e => {
+        const t = selectedText();
+        if (!t || t.vertical) return;
+        const step = e.shiftKey ? 5 : 1;
+        const base = App.Editor.getDisplayRotation(t);
+        applyRotationDeg(base - step);
+      });
+    }
+    if (tbRotPlus) {
+      tbRotPlus.addEventListener('click', e => {
+        const t = selectedText();
+        if (!t || t.vertical) return;
+        const step = e.shiftKey ? 5 : 1;
+        const base = App.Editor.getDisplayRotation(t);
+        applyRotationDeg(base + step);
+      });
+    }
+    if (tbRot) {
+      tbRot.addEventListener('change', () => {
+        const raw = tbRot.value;
+        if (raw === '' || Number.isNaN(+raw)) {
+          syncAngleInput();
+          return;
+        }
+        applyRotationDeg(+raw, { debounced: false });
+      });
+      tbRot.addEventListener('input', () => {
+        const raw = tbRot.value;
+        if (raw === '' || Number.isNaN(+raw)) return;
+        applyRotationDeg(+raw, { debounced: true });
+      });
+      tbRot.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); tbRot.blur(); }
+      });
+    }
+
     tbSizeMinus.addEventListener('click', () => {
+      if (App.Editor.isRotating()) return;
       const t = selectedText();
       const base = t ? Math.round(t.fontPct * App.Editor.stageH()) : +tbSize.value;
       applyFontPx(base - 1);
     });
     tbSizePlus.addEventListener('click', () => {
+      if (App.Editor.isRotating()) return;
       const t = selectedText();
       const base = t ? Math.round(t.fontPct * App.Editor.stageH()) : +tbSize.value;
       applyFontPx(base + 1);
     });
-    tbSize.addEventListener('change', () => applyFontPx(+tbSize.value));
+    tbSize.addEventListener('change', () => {
+      if (App.Editor.isRotating()) return;
+      applyFontPx(+tbSize.value);
+    });
     tbSize.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); tbSize.blur(); } });
 
     stage.addEventListener('wheel', e => {
+      if (App.Editor.isRotating()) return;
       if (!State.selectedTextId) return;
       const box = e.target.closest('.text-box');
       if (!box || box.dataset.id !== State.selectedTextId) return;
@@ -369,9 +502,10 @@
       applyFontPx(Math.round(t.fontPct * App.Editor.stageH()) + (e.deltaY < 0 ? step : -step));
     }, { passive: false });
 
-    const sizeCtrl = document.querySelector('.size-ctrl');
-    if (sizeCtrl) {
-      sizeCtrl.addEventListener('wheel', e => {
+    const sizeStepper = tbSize && tbSize.closest('.stepper');
+    if (sizeStepper) {
+      sizeStepper.addEventListener('wheel', e => {
+        if (App.Editor.isRotating()) return;
         e.preventDefault();
         const t = selectedText();
         const base = t ? Math.round(t.fontPct * App.Editor.stageH()) : +tbSize.value;
@@ -380,7 +514,20 @@
       }, { passive: false });
     }
 
+    const rotStepper = tbRot && tbRot.closest('.stepper');
+    if (rotStepper) {
+      rotStepper.addEventListener('wheel', e => {
+        const t = selectedText();
+        if (!t || t.vertical) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 5 : 1;
+        const base = App.Editor.getDisplayRotation(t);
+        applyRotationDeg(base + (e.deltaY < 0 ? step : -step));
+      }, { passive: false });
+    }
+
     tbFont.addEventListener('change', () => {
+      if (App.Editor.isRotating()) return;
       const t = selectedText();
       if (t) {
         App.Editor.pushHistory();
@@ -392,6 +539,7 @@
     });
 
     tbBold.addEventListener('click', () => {
+      if (App.Editor.isRotating()) return;
       const t = selectedText();
       const next = t ? !t.bold : !State.lastStyle.bold;
       if (t) {
@@ -406,17 +554,24 @@
     });
 
     tbVert.addEventListener('change', () => {
+      if (App.Editor.isRotating()) {
+        tbVert.checked = !tbVert.checked;
+        return;
+      }
       const t = selectedText();
       if (t) {
         App.Editor.pushHistory();
         t.vertical = tbVert.checked;
+        if (t.vertical) t.rotation = 0;
         syncBoxFor(t);
       }
       State.lastStyle.vertical = tbVert.checked;
       State.saveLastStyle();
+      syncRotateControls();
     });
 
     tbStroke.addEventListener('change', () => {
+      if (App.Editor.isRotating()) return;
       const t = selectedText();
       if (t) {
         App.Editor.pushHistory();
@@ -428,6 +583,7 @@
     });
 
     tbStrokeW.addEventListener('input', () => {
+      if (App.Editor.isRotating()) return;
       const pct = +tbStrokeW.value / 100;
       const t = selectedText();
       if (t) {
@@ -451,6 +607,8 @@
     renderPresets,
     syncToolbarFromText,
     syncDefaultStylePanel,
+    syncRotateControls,
+    syncAngleInput,
     commitSizeInput,
     applyFontPx,
     syncSizeInput,

@@ -464,6 +464,84 @@ body.drag-active .dropzone {
   cursor: text;
 }
 
+.text-box.rotating {
+  cursor: grab;
+  z-index: 6;
+}
+
+.text-box.rotating.dragging {
+  cursor: grabbing;
+}
+
+.text-box.rotating textarea {
+  pointer-events: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.text-box.rotating .text-drag-bar,
+.text-box.rotating .text-drag-edge,
+.text-box.rotating .text-select-box {
+  display: none !important;
+}
+
+.text-rotate-confirm {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.text-rotate-confirm .text-rotate-ok,
+.text-rotate-confirm .text-rotate-cancel {
+  position: static;
+  pointer-events: auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.text-rotate-confirm .text-rotate-ok:hover {
+  border-color: var(--accent);
+  background: var(--accent-muted, color-mix(in srgb, var(--accent) 22%, var(--panel2)));
+  color: var(--accent);
+}
+
+.text-rotate-confirm .text-rotate-cancel:hover {
+  border-color: var(--danger, #e55);
+  background: color-mix(in srgb, var(--danger, #e55) 18%, var(--panel2));
+  color: var(--danger, #e55);
+}
+
+.props-hint-inline {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.rotate-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rotate-actions .btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* Draw layers */
 #drawRaster {
   position: absolute;

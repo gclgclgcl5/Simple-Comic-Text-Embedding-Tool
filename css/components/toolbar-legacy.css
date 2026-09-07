@@ -226,6 +226,13 @@
 .text-preset-preview {
   line-height: 1;
   pointer-events: none;
+  display: inline-block;
+  max-width: 100%;
+  transform-origin: center center;
+}
+
+.preset-slot.text-preset .preset-hit {
+  overflow: hidden;
 }
 
 .preset-slot.text-preset.empty .text-preset-preview {

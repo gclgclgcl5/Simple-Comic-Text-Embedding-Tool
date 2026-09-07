@@ -23,6 +23,11 @@
   --overlay: rgba(0, 0, 0, 0.6);
   --dropzone-border: rgba(99, 102, 241, 0.4);
   --dropzone-bg: rgba(99, 102, 241, 0.06);
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.14);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.26);
+  --scrollbar-track: transparent;
+  color-scheme: dark;
 }
 
 [data-theme="light"] {
@@ -49,6 +54,11 @@
   --overlay: rgba(0, 0, 0, 0.4);
   --dropzone-border: rgba(99, 102, 241, 0.5);
   --dropzone-bg: rgba(99, 102, 241, 0.05);
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.16);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+  --scrollbar-track: transparent;
+  color-scheme: light;
 }
 
 /* Legacy aliases used by older rules */

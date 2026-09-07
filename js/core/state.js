@@ -57,15 +57,24 @@
     if (typeof v.stroke !== 'boolean') return null;
     if (typeof v.strokePct !== 'number' || v.strokePct < 0.02 || v.strokePct > 0.2) return null;
     const fontFamily = typeof v.fontFamily === 'string' && v.fontFamily ? v.fontFamily : DEFAULT_FONT;
+    let rotation = 0;
+    if (typeof v.rotation === 'number' && isFinite(v.rotation)) {
+      let d = ((v.rotation + 180) % 360 + 360) % 360 - 180;
+      if (d > 180) d = 180;
+      if (d < -180) d = -180;
+      rotation = d;
+    }
+    const vertical = typeof v.vertical === 'boolean' ? v.vertical : false;
     return {
       color: v.color,
       fontPct: v.fontPct,
       fontFamily,
       bold: typeof v.bold === 'boolean' ? v.bold : false,
-      vertical: typeof v.vertical === 'boolean' ? v.vertical : false,
+      vertical,
       stroke: v.stroke,
       strokeColor: v.strokeColor,
-      strokePct: v.strokePct
+      strokePct: v.strokePct,
+      rotation: vertical ? 0 : rotation
     };
   }
 
@@ -122,6 +131,7 @@
 
   function setEditMode(mode) {
     if (mode !== 'text' && mode !== 'draw') return;
+    if (App.Editor && App.Editor.abortRotateIfNeeded) App.Editor.abortRotateIfNeeded();
     editMode = mode;
     selectedTextId = null;
     const img = current();

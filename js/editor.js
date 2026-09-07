@@ -11,12 +11,268 @@
   const HISTORY_MAX = 50;
   const MIN_TEXT_W = 40;
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+  const CONFIRM_BTN_GAP = 8;
+  const CONFIRM_PAIR_WIDTH = 72;
 
   let measureCanvas = null;
+  let rotateSession = {
+    active: false,
+    textId: null,
+    before: 0,
+    draft: 0,
+    showConfirm: false
+  };
 
   function measureCtx() {
     if (!measureCanvas) measureCanvas = document.createElement('canvas');
     return measureCanvas.getContext('2d');
+  }
+
+  function normalizeRotation(deg) {
+    if (typeof deg !== 'number' || !isFinite(deg)) return 0;
+    let d = ((deg + 180) % 360 + 360) % 360 - 180;
+    if (d > 180) d = 180;
+    if (d < -180) d = -180;
+    return d;
+  }
+
+  function getTextRotation(t) {
+    if (!t) return 0;
+    return normalizeRotation(typeof t.rotation === 'number' ? t.rotation : 0);
+  }
+
+  function ensureTextRotation(t) {
+    if (!t) return 0;
+    t.rotation = getTextRotation(t);
+    return t.rotation;
+  }
+
+  function displayRotation(t) {
+    if (!t) return 0;
+    if (rotateSession.active && rotateSession.textId === t.id) return rotateSession.draft;
+    return getTextRotation(t);
+  }
+
+  function isRotating() {
+    return !!rotateSession.active;
+  }
+
+  function applyBoxTransform(box, deg) {
+    const n = normalizeRotation(deg);
+    box.style.transformOrigin = 'center center';
+    box.style.transform = n ? ('rotate(' + n + 'deg)') : '';
+  }
+
+  function clearRotateConfirmUI() {
+    stage.querySelectorAll('.text-rotate-confirm').forEach(el => el.remove());
+    rotateSession.showConfirm = false;
+  }
+
+  function positionRotateConfirmUI(box, ui) {
+    if (!box || !ui) return;
+    const stageRect = stage.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const centerX = (boxRect.left + boxRect.right) / 2 - stageRect.left;
+    const top = boxRect.bottom - stageRect.top + CONFIRM_BTN_GAP;
+    ui.style.left = Math.round(centerX - CONFIRM_PAIR_WIDTH / 2) + 'px';
+    ui.style.top = Math.round(top) + 'px';
+  }
+
+  function mountRotateConfirmUI(box, t) {
+    clearRotateConfirmUI();
+    rotateSession.showConfirm = true;
+    const ui = document.createElement('div');
+    ui.className = 'text-rotate-confirm';
+    ui.dataset.for = t.id;
+    ui.innerHTML =
+      '<button type="button" class="text-rotate-ok" title="确认角度">✓</button>' +
+      '<button type="button" class="text-rotate-cancel" title="还原角度">×</button>';
+    stage.appendChild(ui);
+    positionRotateConfirmUI(box, ui);
+
+    const stop = e => { e.preventDefault(); e.stopPropagation(); };
+    ui.addEventListener('pointerdown', stop);
+    ui.addEventListener('mousedown', stop);
+
+    ui.querySelector('.text-rotate-ok').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmRotate();
+    });
+    ui.querySelector('.text-rotate-cancel').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelRotateDraft();
+    });
+  }
+
+  function syncRotatingClass(box, t) {
+    const on = rotateSession.active && rotateSession.textId === t.id;
+    box.classList.toggle('rotating', on);
+  }
+
+  function refreshRotateVisual(t) {
+    if (!t) return;
+    const box = stage.querySelector(`.text-box[data-id="${t.id}"]`);
+    if (!box) return;
+    applyBoxTransform(box, displayRotation(t));
+    syncRotatingClass(box, t);
+    if (rotateSession.showConfirm && rotateSession.textId === t.id) {
+      const ui = stage.querySelector('.text-rotate-confirm[data-for="' + t.id + '"]');
+      if (ui) positionRotateConfirmUI(box, ui);
+      else mountRotateConfirmUI(box, t);
+    }
+  }
+
+  function getRotateDraft() {
+    return rotateSession.active ? rotateSession.draft : null;
+  }
+
+  function getDisplayRotation(t) {
+    if (!t) return 0;
+    return displayRotation(t);
+  }
+
+  function setRotateDraft(deg) {
+    if (!rotateSession.active) return false;
+    rotateSession.draft = normalizeRotation(deg);
+    const img = State.current();
+    const t = img && img.texts.find(x => x.id === rotateSession.textId);
+    if (t) refreshRotateVisual(t);
+    return true;
+  }
+
+  function notifyRotateUI() {
+    if (App.Toolbar && App.Toolbar.syncRotateControls) App.Toolbar.syncRotateControls();
+    syncPropsUI();
+  }
+
+  function startRotate() {
+    if (!State.isTextMode() || !State.current() || !State.selectedTextId) return false;
+    const t = State.current().texts.find(x => x.id === State.selectedTextId);
+    if (!t || t.vertical) return false;
+    if (rotateSession.active && rotateSession.textId === t.id) return true;
+    if (rotateSession.active) abortRotateIfNeeded();
+    const ang = ensureTextRotation(t);
+    rotateSession = {
+      active: true,
+      textId: t.id,
+      before: ang,
+      draft: ang,
+      showConfirm: false
+    };
+    clearRotateConfirmUI();
+    const box = stage.querySelector(`.text-box[data-id="${t.id}"]`);
+    if (box) {
+      const ta = box.querySelector('textarea');
+      if (ta && document.activeElement === ta) ta.blur();
+      syncRotatingClass(box, t);
+      applyBoxTransform(box, ang);
+      syncTextHandles();
+    }
+    notifyRotateUI();
+    return true;
+  }
+
+  function exitRotate(discard) {
+    if (!rotateSession.active) return;
+    const textId = rotateSession.textId;
+    const before = rotateSession.before;
+    const draft = rotateSession.draft;
+    clearRotateConfirmUI();
+    rotateSession = { active: false, textId: null, before: 0, draft: 0, showConfirm: false };
+    const img = State.current();
+    const t = img && textId ? img.texts.find(x => x.id === textId) : null;
+    if (t) {
+      if (discard) t.rotation = before;
+      else t.rotation = normalizeRotation(draft);
+      ensureTextRotation(t);
+      const box = stage.querySelector(`.text-box[data-id="${t.id}"]`);
+      if (box) {
+        syncRotatingClass(box, t);
+        applyBoxTransform(box, getTextRotation(t));
+        syncTextHandles();
+      }
+    }
+    notifyRotateUI();
+  }
+
+  function confirmRotate() {
+    if (!rotateSession.active) return;
+    const img = State.current();
+    const t = img && img.texts.find(x => x.id === rotateSession.textId);
+    if (!t) {
+      exitRotate(true);
+      return;
+    }
+    const next = normalizeRotation(rotateSession.draft);
+    const prev = ensureTextRotation(t);
+    if (next !== prev) pushHistory(img);
+    t.rotation = next;
+    clearRotateConfirmUI();
+    rotateSession = { active: false, textId: null, before: 0, draft: 0, showConfirm: false };
+    const box = stage.querySelector(`.text-box[data-id="${t.id}"]`);
+    if (box) {
+      syncRotatingClass(box, t);
+      applyBoxTransform(box, next);
+      syncTextHandles();
+    }
+    scheduleEdit();
+    persistSession();
+    notifyRotateUI();
+  }
+
+  function cancelRotateDraft() {
+    if (!rotateSession.active) return;
+    rotateSession.draft = rotateSession.before;
+    clearRotateConfirmUI();
+    const img = State.current();
+    const t = img && img.texts.find(x => x.id === rotateSession.textId);
+    if (t) refreshRotateVisual(t);
+    notifyRotateUI();
+  }
+
+  function abortRotateIfNeeded() {
+    if (!rotateSession.active) return false;
+    exitRotate(true);
+    return true;
+  }
+
+  function startBoxRotate(e, box, t) {
+    e.preventDefault();
+    e.stopPropagation();
+    clearRotateConfirmUI();
+    const stageRect = stage.getBoundingClientRect();
+    const cx = t.x * stage.clientWidth;
+    const cy = t.y * stage.clientHeight;
+    const sx0 = e.clientX - stageRect.left;
+    const sy0 = e.clientY - stageRect.top;
+    const startPointerAngle = Math.atan2(sy0 - cy, sx0 - cx);
+    const startDraft = rotateSession.draft;
+    let moved = false;
+
+    const move = ev => {
+      const sx = ev.clientX - stageRect.left;
+      const sy = ev.clientY - stageRect.top;
+      if (!moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) > 2) {
+        moved = true;
+        box.classList.add('dragging');
+      }
+      const ang = Math.atan2(sy - cy, sx - cx);
+      let deltaDeg = (ang - startPointerAngle) * 180 / Math.PI;
+      rotateSession.draft = normalizeRotation(startDraft + deltaDeg);
+      applyBoxTransform(box, rotateSession.draft);
+      if (App.Toolbar && App.Toolbar.syncAngleInput) App.Toolbar.syncAngleInput();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      box.classList.remove('dragging');
+      mountRotateConfirmUI(box, t);
+      notifyRotateUI();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   }
 
   async function prepareTextFont(fontFamily, fs) {
@@ -171,7 +427,8 @@
     if (!State.current()) return;
     stage.querySelectorAll('.text-box').forEach(box => {
       const hasZones = box.querySelector('.text-drag-bar');
-      if (box.classList.contains('selected')) {
+      const rotating = rotateSession.active && rotateSession.textId === box.dataset.id;
+      if (box.classList.contains('selected') && !rotating) {
         mountDragZones(box);
       } else if (hasZones) {
         box.querySelectorAll('.text-drag-bar, .text-drag-edge').forEach(el => el.remove());
@@ -184,7 +441,8 @@
     stage.querySelectorAll('.text-box').forEach(box => {
       const sb = box.querySelector('.text-select-box');
       const t = State.current().texts.find(x => x.id === box.dataset.id);
-      if (box.classList.contains('selected') && t && !t.vertical) {
+      const rotating = rotateSession.active && rotateSession.textId === box.dataset.id;
+      if (box.classList.contains('selected') && t && !t.vertical && !rotating) {
         mountTextHandles(box);
       } else if (sb) {
         sb.remove();
@@ -218,7 +476,9 @@
   }
 
   function restoreTextSnapshot(img, snap) {
+    abortRotateIfNeeded();
     img.texts = JSON.parse(JSON.stringify(snap.texts));
+    img.texts.forEach(ensureTextRotation);
     State.selectedTextId = snap.selectedTextId;
     if (State.selectedTextId && !img.texts.some(t => t.id === State.selectedTextId)) {
       State.selectedTextId = null;
@@ -297,8 +557,10 @@
   }
 
   function syncPropsUI() {
-    if (tbDelBtn) tbDelBtn.disabled = !State.selectedTextId;
+    const rotating = isRotating();
+    if (tbDelBtn) tbDelBtn.disabled = rotating || !State.selectedTextId;
     if (App.UI) App.UI.syncPropsState();
+    if (App.Toolbar && App.Toolbar.syncRotateControls) App.Toolbar.syncRotateControls();
   }
 
   function layoutStage() {
@@ -315,6 +577,7 @@
   function selectImage(id) {
     const img = State.getImage(id);
     if (!img) return;
+    abortRotateIfNeeded();
     State.currentId = id;
     State.selectedTextId = null;
     stageImg.src = img.url;
@@ -387,13 +650,19 @@
       box.style.left = Math.round(t.x * sw - w / 2) + 'px';
       box.style.top = Math.round(t.y * sh - h / 2) + 'px';
     }
+    applyBoxTransform(box, displayRotation(t));
+    syncRotatingClass(box, t);
     syncTextHandles();
   }
 
   async function renderBoxes() {
     if (!State.current()) return;
+    const keepConfirm = rotateSession.active && rotateSession.showConfirm ? rotateSession.textId : null;
+    clearRotateConfirmUI();
+    if (keepConfirm) rotateSession.showConfirm = true;
     stage.querySelectorAll('.text-box').forEach(el => el.remove());
     const img = State.current();
+    img.texts.forEach(ensureTextRotation);
     await prepareTextFontsForImage(img);
     for (const t of img.texts) {
       const box = document.createElement('div');
@@ -404,21 +673,36 @@
       ta.value = t.text;
       ta.spellcheck = false;
       ta.placeholder = '输入文字…';
+      ta.readOnly = rotateSession.active && rotateSession.textId === t.id;
       box.appendChild(ta);
       stage.appendChild(box);
       await syncBox(box, t);
       ta.addEventListener('input', () => {
+        if (rotateSession.active && rotateSession.textId === t.id) return;
         onTextInputHistory(img);
         t.text = ta.value;
         syncBox(box, t);
         App.Gallery.updateBadge(State.currentId);
         scheduleEdit();
       });
-      ta.addEventListener('focus', () => { if (State.isTextMode()) selectBox(t); });
+      ta.addEventListener('focus', () => {
+        if (rotateSession.active && rotateSession.textId === t.id) {
+          ta.blur();
+          return;
+        }
+        if (State.isTextMode()) selectBox(t);
+      });
       ta.addEventListener('dblclick', e => e.stopPropagation());
       box.addEventListener('pointerdown', e => onBoxPointerDown(e, box, t));
     }
+    if (keepConfirm) {
+      const t = img.texts.find(x => x.id === keepConfirm);
+      const box = t && stage.querySelector(`.text-box[data-id="${keepConfirm}"]`);
+      if (t && box) mountRotateConfirmUI(box, t);
+      else rotateSession.showConfirm = false;
+    }
     syncPropsUI();
+    notifyRotateUI();
   }
 
   function applyResizeBox(box, t, handle, bounds, sw, sh, keepCenterY) {
@@ -505,6 +789,17 @@
   function onBoxPointerDown(e, box, t) {
     if (!State.isTextMode()) return;
     if (e.button !== 0) return;
+    if (e.target.closest('.text-rotate-confirm')) return;
+
+    if (rotateSession.active) {
+      if (rotateSession.textId !== t.id) {
+        abortRotateIfNeeded();
+        selectBox(t);
+        return;
+      }
+      startBoxRotate(e, box, t);
+      return;
+    }
 
     selectBox(t);
 
@@ -565,17 +860,20 @@
 
   function selectBox(t) {
     if (!State.isTextMode()) return;
+    if (rotateSession.active && rotateSession.textId !== t.id) abortRotateIfNeeded();
     if (State.selectedTextId && State.selectedTextId !== t.id) App.Toolbar.commitSizeInput();
     State.selectedTextId = t.id;
     stage.querySelectorAll('.text-box').forEach(b => b.classList.toggle('selected', b.dataset.id === t.id));
     App.Toolbar.syncToolbarFromText(t);
     syncTextHandles();
     syncPropsUI();
+    notifyRotateUI();
     persistSession();
   }
 
   function clearSelection() {
     if (!State.isTextMode()) return;
+    abortRotateIfNeeded();
     if (!State.selectedTextId) return;
     App.Toolbar.commitSizeInput();
     App.Toolbar.closeColorPops();
@@ -586,11 +884,13 @@
     stage.querySelectorAll('.text-box.selected').forEach(b => b.classList.remove('selected'));
     syncTextHandles();
     syncPropsUI();
+    notifyRotateUI();
     persistSession();
   }
 
   function addText(xPct, yPct) {
     if (!State.isTextMode() || !State.current()) return;
+    abortRotateIfNeeded();
     const img = State.current();
     pushHistory(img);
     const ls = State.lastStyle;
@@ -598,7 +898,7 @@
       id: State.uid(), text: '在此输入文字', color: ls.color, fontPct: ls.fontPct,
       x: xPct ?? 0.5, y: yPct ?? 0.5, widthPct: 0.4, widthMode: 'auto', heightMode: 'auto',
       fontFamily: ls.fontFamily, bold: !!ls.bold, vertical: ls.vertical, stroke: ls.stroke,
-      strokeColor: ls.strokeColor, strokePct: ls.strokePct
+      strokeColor: ls.strokeColor, strokePct: ls.strokePct, rotation: 0
     };
     State.current().texts.push(t);
     renderBoxes();
@@ -612,6 +912,8 @@
 
   function removeText(id) {
     if (!State.current()) return;
+    if (rotateSession.active && rotateSession.textId === id) abortRotateIfNeeded();
+    else if (rotateSession.active) abortRotateIfNeeded();
     pushHistory(State.current());
     State.current().texts = State.current().texts.filter(t => t.id !== id);
     if (State.selectedTextId === id) State.selectedTextId = null;
@@ -648,6 +950,9 @@
     selectBox, clearSelection, addText, removeText, wrapText,
     pushHistory, pushHistoryDebounced, undo, redo,
     textInnerPad, measureInk,
+    startRotate, exitRotate, confirmRotate, cancelRotateDraft,
+    abortRotateIfNeeded, isRotating, getTextRotation, ensureTextRotation,
+    normalizeRotation, getRotateDraft, getDisplayRotation, setRotateDraft,
     BOLD_RATIO, FONT: () => FONT, LH_RATIO
   };
 })(window.App = window.App || {});

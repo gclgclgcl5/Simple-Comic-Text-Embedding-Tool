@@ -114,7 +114,7 @@
 
     canvasArea.addEventListener('mousedown', e => {
       if (!State.isTextMode() || !State.selectedTextId) return;
-      if (e.target.closest('.text-box') || e.target.closest('#textProps') || e.target.closest('.props-panel')) return;
+      if (e.target.closest('.text-box') || e.target.closest('#textProps') || e.target.closest('.props-panel') || e.target.closest('.text-rotate-confirm')) return;
       App.Editor.clearSelection();
     });
 
@@ -166,6 +166,7 @@
 
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault();
+        if (App.Editor.isRotating()) { App.Editor.abortRotateIfNeeded(); return; }
         const img = State.current();
         if (img) {
           if (e.shiftKey) App.Editor.redo(img);
@@ -175,21 +176,25 @@
       }
       if (mod && (e.key === 'y' || e.key === 'Y')) {
         e.preventDefault();
+        if (App.Editor.isRotating()) { App.Editor.abortRotateIfNeeded(); return; }
         const img = State.current();
         if (img) App.Editor.redo(img);
         return;
       }
 
       if (mod && (e.key === 'b' || e.key === 'B') && State.selectedTextId) {
+        if (App.Editor.isRotating()) return;
         e.preventDefault();
         tbBold.click();
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        if (App.Editor.isRotating()) { e.preventDefault(); return; }
         if (State.selectedTextId) { e.preventDefault(); App.Editor.removeText(State.selectedTextId); }
       } else if (e.key === 'Escape') {
         if (App.Toolbar.cancelEyedropper()) return;
+        if (App.Editor.abortRotateIfNeeded()) return;
         if (State.selectedTextId) App.Editor.clearSelection();
       }
     });

@@ -177,6 +177,20 @@
             </div>
           </div>
           <div class="panel-section">
+            <div class="panel-section-title">旋转</div>
+            <span class="size-ctrl stepper" title="旋转角度（可直接输入，或点 ± 调整；Shift+点击步进 5°）">
+              <button type="button" class="sz-btn stepper-btn" id="tbRotMinus" title="减小角度">−</button>
+              <input type="number" id="tbRot" class="stepper-input" min="-180" max="180" step="1" value="0" disabled>
+              <span class="size-unit stepper-unit">°</span>
+              <button type="button" class="sz-btn stepper-btn" id="tbRotPlus" title="增大角度">+</button>
+            </span>
+            <div class="panel-section-row rotate-actions" style="margin-top:8px">
+              <button type="button" class="btn" id="tbRotateStart" title="进入旋转模式，拖动文字框绕中心旋转" disabled>开始旋转</button>
+              <button type="button" class="btn" id="tbRotateExit" title="取消未确认角度并退出旋转模式" hidden>退出旋转模式</button>
+            </div>
+            <div class="props-hint-inline" id="tbRotateHint" hidden>拖动文字框旋转，松手后点 ✓ 确认或 × 还原</div>
+          </div>
+          <div class="panel-section">
             <div class="panel-section-title">描边</div>
             <div class="panel-section-stack">
               <label class="toggle" title="文字描边">
@@ -337,15 +351,16 @@
       <h3>模式说明</h3>
       <ul>
         <li><strong>嵌字模式</strong>：选中文字框后在右侧修改样式；无选中时可设置默认样式</li>
+        <li><strong>旋转模式</strong>：选中横排文字后可在面板输入/步进角度，或点「开始旋转」拖动绕中心旋转（±180°）；松手后点 ✓ 确认并退出，点 × 还原进入前角度；「退出旋转模式」或 Esc 取消未确认角度</li>
         <li><strong>画图模式</strong>：用画笔或形状遮盖原图文字，再切换回嵌字模式添加文字</li>
-        <li><strong>样式预设</strong>（嵌字面板）：选中文字框后点空白槽保存；点有内容槽套用到选中文字框；× 删除</li>
+        <li><strong>样式预设</strong>（嵌字面板）：选中文字框后点空白槽保存（含旋转角度）；点有内容槽套用到选中文字框；× 删除</li>
         <li><strong>图形预设</strong>（画图面板）：选中图形后点空白槽保存；点有内容槽在图片中心插入；× 删除</li>
       </ul>
       <h3>快捷键</h3>
       <table>
         <tr><th>按键</th><th>功能</th></tr>
         <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>删除选中的文字框（嵌字模式）或图形（画图模式，需先选中矩形/椭圆）</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>取消取色 / 取消选中文字框（嵌字模式）</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>取消取色 / 退出旋转模式（丢弃未确认角度）/ 取消选中文字框（嵌字模式）</td></tr>
         <tr><td><kbd>Ctrl+B</kbd></td><td>加粗（嵌字模式，需选中文字框）</td></tr>
         <tr><td><kbd>Ctrl+Z</kbd></td><td>撤销（嵌字：文字操作；画图：画笔/形状）</td></tr>
         <tr><td><kbd>Ctrl+Y</kbd> / <kbd>Ctrl+Shift+Z</kbd></td><td>重做（嵌字：文字操作；画图：画笔/形状）</td></tr>

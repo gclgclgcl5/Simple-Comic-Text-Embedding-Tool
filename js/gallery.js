@@ -117,6 +117,9 @@
   function removeImage(id) {
     const img = State.getImage(id);
     if (!img) return;
+    if (State.currentId === id && App.Editor && App.Editor.abortRotateIfNeeded) {
+      App.Editor.abortRotateIfNeeded();
+    }
     URL.revokeObjectURL(img.url);
     State.images = State.images.filter(i => i.id !== id);
     if (State.currentId === id) {
@@ -139,6 +142,7 @@
   }
 
   function clearAll(skipStorage, silent) {
+    if (App.Editor && App.Editor.abortRotateIfNeeded) App.Editor.abortRotateIfNeeded();
     State.images.forEach(i => URL.revokeObjectURL(i.url));
     State.images = [];
     State.currentId = null;
