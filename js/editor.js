@@ -10,6 +10,7 @@
   const BOLD_RATIO = 0.05;
   const HISTORY_MAX = 50;
   const MIN_TEXT_W = 40;
+  const TEXT_PLACEHOLDER = '在此输入文字';
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   const CONFIRM_BTN_GAP = 8;
   const CONFIRM_PAIR_WIDTH = 72;
@@ -329,7 +330,9 @@
     const famRef = fontFamily ? ('"' + fontFamily + '"') : FONT;
     ctx.font = fs + 'px ' + famRef;
 
-    const raw = t.text.length ? t.text : ' ';
+    const isEmpty = !(t.text && t.text.length);
+    // 空内容时按 placeholder 测宽，避免框太窄只露出「在」
+    const raw = isEmpty ? TEXT_PLACEHOLDER : t.text;
     let maxLineW = fs * 0.5;
     for (const line of raw.split(/\r?\n/)) {
       const sample = line.length ? line : ' ';
@@ -578,6 +581,8 @@
     const img = State.getImage(id);
     if (!img) return;
     abortRotateIfNeeded();
+    if (App.Main && App.Main.endPeekOriginal) App.Main.endPeekOriginal();
+    else if (stage) stage.classList.remove('peek-original');
     State.currentId = id;
     State.selectedTextId = null;
     stageImg.src = img.url;
@@ -629,7 +634,9 @@
       ta.style.writingMode = 'vertical-lr';
       ta.style.textOrientation = 'upright';
       ta.style.lineHeight = '1.15';
-      const cols = t.text.split('\n');
+      const isEmpty = !(t.text && t.text.length);
+      const measureText = isEmpty ? TEXT_PLACEHOLDER : t.text;
+      const cols = measureText.split('\n');
       const colW = Math.max(10, fs);
       const maxLen = Math.max(1, ...cols.map(c => [...c].length));
       const ink = Math.ceil((t.bold ? fs * BOLD_RATIO : 0) * 2) + 2;
@@ -670,9 +677,9 @@
       box.dataset.id = t.id;
       const ta = document.createElement('textarea');
       ta.rows = 1;
-      ta.value = t.text;
+      ta.value = t.text || '';
       ta.spellcheck = false;
-      ta.placeholder = '输入文字…';
+      ta.placeholder = TEXT_PLACEHOLDER;
       ta.readOnly = rotateSession.active && rotateSession.textId === t.id;
       box.appendChild(ta);
       stage.appendChild(box);
@@ -888,23 +895,28 @@
     persistSession();
   }
 
-  function addText(xPct, yPct) {
+  async function addText(xPct, yPct) {
     if (!State.isTextMode() || !State.current()) return;
     abortRotateIfNeeded();
     const img = State.current();
     pushHistory(img);
     const ls = State.lastStyle;
     const t = {
-      id: State.uid(), text: '在此输入文字', color: ls.color, fontPct: ls.fontPct,
+      id: State.uid(), text: '', color: ls.color, fontPct: ls.fontPct,
       x: xPct ?? 0.5, y: yPct ?? 0.5, widthPct: 0.4, widthMode: 'auto', heightMode: 'auto',
       fontFamily: ls.fontFamily, bold: !!ls.bold, vertical: ls.vertical, stroke: ls.stroke,
       strokeColor: ls.strokeColor, strokePct: ls.strokePct, rotation: 0
     };
     State.current().texts.push(t);
-    renderBoxes();
+    State.selectedTextId = t.id;
+    await renderBoxes();
     selectBox(t);
     const ta = stage.querySelector(`.text-box[data-id="${t.id}"] textarea`);
-    if (ta) { ta.focus(); ta.select(); }
+    if (ta) {
+      requestAnimationFrame(() => {
+        ta.focus({ preventScroll: true });
+      });
+    }
     App.Gallery.updateBadge(State.currentId);
     scheduleEdit();
     persistSession();

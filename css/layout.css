@@ -362,6 +362,11 @@ body.drag-active .dropzone {
   display: block;
 }
 
+.text-box textarea::placeholder {
+  color: color-mix(in srgb, currentColor 45%, transparent);
+  opacity: 1;
+}
+
 .text-box.selected textarea {
   outline: 2px dashed var(--accent);
   outline-offset: 1px;
@@ -604,6 +609,33 @@ body.drag-active .dropzone {
 
 #editor.mode-draw .text-box textarea {
   cursor: default;
+}
+
+/* Hold Space: peek original image */
+#stage.peek-original #drawRaster,
+#stage.peek-original #drawShapeLayer,
+#stage.peek-original .text-box,
+#stage.peek-original .text-rotate-confirm {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+#stage.peek-original::after {
+  content: "原图";
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 30;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Toast */

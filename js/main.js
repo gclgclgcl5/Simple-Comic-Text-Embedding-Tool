@@ -9,6 +9,29 @@
     fontUploadBtn, fontInput, exportOneBtn, exportBtn, tbDelBtn, tbBold
   } = App.Dom;
 
+  let peekingOriginal = false;
+
+  function canPeekOriginal() {
+    if (!State.current() || !stage || stage.hidden) return false;
+    const el = document.activeElement;
+    const tag = (el && el.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
+    if (el && el.isContentEditable) return false;
+    return true;
+  }
+
+  function startPeekOriginal() {
+    if (peekingOriginal || !canPeekOriginal()) return;
+    peekingOriginal = true;
+    stage.classList.add('peek-original');
+  }
+
+  function endPeekOriginal() {
+    if (!peekingOriginal) return;
+    peekingOriginal = false;
+    if (stage) stage.classList.remove('peek-original');
+  }
+
   async function init() {
     App.UI.init();
     State.loadLastStyle();
@@ -132,6 +155,17 @@
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       const mod = e.ctrlKey || e.metaKey;
 
+      if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (!e.repeat && canPeekOriginal()) {
+          e.preventDefault();
+          startPeekOriginal();
+        } else if (peekingOriginal) {
+          e.preventDefault();
+        }
+        return;
+      }
+
       if (State.isDrawMode() && mod && tag !== 'INPUT' && tag !== 'TEXTAREA') {
         if (e.key === 'z' || e.key === 'Z') {
           if (e.shiftKey) {
@@ -199,6 +233,14 @@
       }
     });
 
+    document.addEventListener('keyup', e => {
+      if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') endPeekOriginal();
+    });
+    window.addEventListener('blur', endPeekOriginal);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) endPeekOriginal();
+    });
+
     fontUploadBtn.addEventListener('click', () => fontInput.click());
     fontInput.addEventListener('change', async () => {
       const files = [...fontInput.files];
@@ -212,6 +254,6 @@
     exportBtn.addEventListener('click', () => App.Export.exportSelected());
   }
 
-  App.Main = { init };
+  App.Main = { init, endPeekOriginal };
   init();
 })(window.App = window.App || {});

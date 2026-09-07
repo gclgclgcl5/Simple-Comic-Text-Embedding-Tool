@@ -132,6 +132,7 @@
   function setEditMode(mode) {
     if (mode !== 'text' && mode !== 'draw') return;
     if (App.Editor && App.Editor.abortRotateIfNeeded) App.Editor.abortRotateIfNeeded();
+    if (App.Main && App.Main.endPeekOriginal) App.Main.endPeekOriginal();
     editMode = mode;
     selectedTextId = null;
     const img = current();
