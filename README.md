@@ -144,7 +144,7 @@ image-text-tool-main/
 ├── CHANGELOG.md           # 更新日志
 ├── LICENSE                # 工具代码许可（MIT）
 └── 字体样式/              # 内置字体（免费可商用，授权文件随附）
-    ├── 方正卡通简体/            → 方正卡通简体.ttf
+    ├── 方正卡通简体/            → 方正卡通_GBK.ttf
     └── 文渊圆体/                → WenYuanRoundedSC-Regular.ttf、WenYuanRoundedSC-Medium.ttf
 ```
 
@@ -154,7 +154,7 @@ image-text-tool-main/
 
 | 字体 | 文件名 | 授权 |
 | --- | --- | --- |
-| 方正卡通简体 | 方正卡通简体.ttf | 见字体目录内说明 |
+| 方正卡通简体 | 方正卡通_GBK.ttf | 见字体目录内说明 |
 | 文渊圆体-常规 | WenYuanRoundedSC-Regular.ttf | 免费商用（见 `LICENSE-zh.md`） |
 | 文渊圆体-中 | WenYuanRoundedSC-Medium.ttf | 免费商用（见 `LICENSE-zh.md`） |
 
