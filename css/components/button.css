@@ -51,8 +51,8 @@
 }
 
 .btn-mini:hover {
-  color: var(--danger);
-  border-color: var(--danger);
+  color: var(--text);
+  border-color: var(--border-strong);
 }
 
 .icon-btn {

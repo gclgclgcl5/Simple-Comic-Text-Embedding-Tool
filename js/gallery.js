@@ -75,7 +75,7 @@
         : `${rootSel} / ${roots.length}`;
       checkAll.checked = roots.length > 0 && rootSel === roots.length;
       checkAll.indeterminate = rootSel > 0 && rootSel < roots.length;
-      if (checkAllText) checkAllText.textContent = '全选散图';
+      if (checkAllText) checkAllText.textContent = '全选';
     }
   }
 

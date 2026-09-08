@@ -2,10 +2,10 @@
 #gallery {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-3);
+  padding: var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
   align-content: start;
 }
 
@@ -16,12 +16,12 @@
   gap: var(--space-3);
   border-radius: var(--radius-md);
   overflow: hidden;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   background: var(--panel2);
   cursor: pointer;
   transition: border-color var(--duration-fast), background var(--duration-fast);
-  padding: var(--space-2);
-  min-height: 72px;
+  padding: var(--space-2) var(--space-3);
+  min-height: 68px;
 }
 
 .thumb:hover {
@@ -32,12 +32,14 @@
 .thumb.current {
   border-color: var(--accent);
   background: var(--accent-muted);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .thumb-preview {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   flex-shrink: 0;
+  align-self: center;
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--bg);
@@ -61,7 +63,8 @@
   padding: var(--space-1) 0;
 }
 
-.thumb .meta {
+.thumb .meta,
+.project-row .meta {
   font-size: 12px;
   color: var(--text);
   overflow: hidden;
@@ -74,8 +77,9 @@
   align-self: flex-start;
   padding: 1px 8px;
   border-radius: var(--radius-full);
-  background: var(--accent);
-  color: #fff;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
   font-size: 10px;
   font-weight: 600;
   pointer-events: none;
@@ -88,7 +92,7 @@
 .thumb-actions {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-2);
+  gap: var(--space-1);
   flex-shrink: 0;
 }
 
@@ -156,7 +160,11 @@
 .gallery-nav {
   display: flex;
   align-items: center;
-  padding: 0 0 var(--space-1);
+  margin: calc(var(--space-1) * -1) calc(var(--space-3) * -1) var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--panel-hover);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .gallery-nav-back {
@@ -170,6 +178,9 @@
   border-radius: var(--radius-sm);
   text-align: left;
   width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gallery-nav-back:hover {
@@ -183,12 +194,12 @@
   gap: var(--space-3);
   border-radius: var(--radius-md);
   overflow: hidden;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   background: var(--panel2);
   cursor: pointer;
   transition: border-color var(--duration-fast), background var(--duration-fast);
-  padding: var(--space-2);
-  min-height: 56px;
+  padding: var(--space-2) var(--space-3);
+  min-height: 48px;
 }
 
 .project-row:hover {
@@ -202,15 +213,15 @@
 }
 
 .project-icon {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   align-self: center;
   border-radius: var(--radius-sm);
   background:
     linear-gradient(180deg, transparent 38%, var(--accent) 38%, var(--accent) 42%, transparent 42%),
     linear-gradient(90deg, var(--accent-muted) 0%, var(--accent-muted) 100%);
-  border: 2px solid var(--accent);
+  border: 1px solid var(--accent);
   box-sizing: border-box;
   position: relative;
 }
@@ -218,10 +229,10 @@
 .project-icon::before {
   content: '';
   position: absolute;
-  top: 4px;
-  left: 6px;
-  width: 14px;
-  height: 6px;
+  top: 3px;
+  left: 5px;
+  width: 11px;
+  height: 5px;
   border-radius: 2px 2px 0 0;
   background: var(--accent);
 }
@@ -251,9 +262,10 @@
 }
 
 .project-badge {
-  background: var(--panel-hover) !important;
+  background: transparent !important;
   color: var(--muted) !important;
   border: 1px solid var(--border);
+  font-weight: 500;
 }
 
 .thumb.dragging {

@@ -148,13 +148,21 @@ body.gallery-collapsed.props-collapsed .app-main {
 
 .gallery-toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-4);
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
   font-size: 13px;
   color: var(--muted);
   flex: none;
+}
+
+.gallery-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .gallery-toolbar label {
@@ -163,12 +171,19 @@ body.gallery-collapsed.props-collapsed .app-main {
   gap: var(--space-2);
   cursor: pointer;
   color: var(--text);
+  flex-shrink: 0;
 }
 
 .gallery-toolbar .head-right {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
+}
+
+#clearAllBtn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .gallery-footer {

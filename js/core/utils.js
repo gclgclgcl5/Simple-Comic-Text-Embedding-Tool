@@ -10,7 +10,7 @@
 
   const baseName = n => { const i = n.lastIndexOf('.'); return i > 0 ? n.slice(0, i) : n; };
 
-  /** 导出主文件名：不再追加「已嵌字」 */
+  /** 导出主文件名 */
   const exportName = n => baseName(n);
 
   /**
