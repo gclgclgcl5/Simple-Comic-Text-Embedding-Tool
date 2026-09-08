@@ -5,7 +5,7 @@
   const { toast } = App.Utils;
   const State = App.State;
   const {
-    fileInput, checkAll, clearAllBtn, clearCacheBtn, addTextBtn, stage, canvasArea,
+    fileInput, checkAll, clearAllBtn, createProjectBtn, clearCacheBtn, addTextBtn, stage, canvasArea,
     fontUploadBtn, fontInput, exportOneBtn, exportBtn, tbDelBtn, tbBold
   } = App.Dom;
 
@@ -87,23 +87,25 @@
     });
 
     checkAll.addEventListener('change', e => {
-      const v = e.target.checked;
-      State.images.forEach(i => i.selected = v);
-      App.Gallery.renderThumbs();
-      App.Gallery.persistAllSelected();
+      App.Gallery.selectAllInView(e.target.checked);
     });
 
+    if (createProjectBtn) {
+      createProjectBtn.addEventListener('click', () => App.Gallery.createProject());
+    }
+
     clearAllBtn.addEventListener('click', () => {
-      if (!State.images.length) { toast('列表已经是空的'); return; }
-      if (!confirm('确定要清空全部 ' + State.images.length + ' 张图片吗？\n所有文字编辑也会一并清除，且无法撤销。')) return;
-      App.Gallery.clearAll();
+      const n = State.rootImages().length;
+      if (!n) { toast('根目录没有散图'); return; }
+      if (!confirm('确定要清空根目录 ' + n + ' 张散图吗？\n不会删除工程文件夹。\n散图上的文字编辑也会一并清除，且无法撤销。')) return;
+      App.Gallery.clearRootImages();
     });
 
     if (clearCacheBtn) {
       clearCacheBtn.addEventListener('click', async () => {
-        if (!confirm('将清除所有本地保存的图片、编辑与上传字体。\n当前内存中的内容也会一并清空，是否继续？')) return;
+        if (!confirm('将清除所有本地保存的图片、工程、编辑与上传字体。\n当前内存中的内容也会一并清空，是否继续？')) return;
         if (App.Storage.isAvailable()) await App.Storage.clearAll();
-        if (State.images.length) App.Gallery.clearAll(true, true);
+        App.Gallery.clearAll(true, true);
         toast('已清除本地缓存');
       });
     }

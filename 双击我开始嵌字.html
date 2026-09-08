@@ -47,9 +47,10 @@
       </button>
     </div>
     <div class="gallery-toolbar">
-      <label><input type="checkbox" id="checkAll" class="field-checkbox"> 全选</label>
+      <label id="checkAllLabel"><input type="checkbox" id="checkAll" class="field-checkbox"> <span id="checkAllText">全选散图</span></label>
       <div class="head-right">
-        <button class="btn-mini" id="clearAllBtn" title="一键清空所有已上传图片">清空</button>
+        <button class="btn-mini" id="createProjectBtn" title="创建工程文件夹">创建工程</button>
+        <button class="btn-mini" id="clearAllBtn" title="仅清空根目录散图，不会删除工程文件夹">清空散图</button>
         <span id="selInfo">0 / 0</span>
       </div>
     </div>
@@ -346,7 +347,8 @@
         <li>移动文字框：拖动顶部条，或左/右/底边距条</li>
         <li>缩放文字框：拖动八点手柄（横排）</li>
         <li>设置样式：在右侧属性面板设置颜色、字号、字体、竖排、描边</li>
-        <li>导出：勾选要导出的图片，点「导出所选」下载 ZIP；或点「导出当前」单张导出</li>
+        <li>工程文件夹：点「创建工程」命名；双击进入；工程内导入按 1.png、2.png… 命名；可将根目录散图拖入工程</li>
+        <li>导出：根目录勾选散图与工程后导出 ZIP（工程进子文件夹，散图在根）；工程内仅导出当前勾选图片；或点「导出当前」单张导出</li>
       </ol>
       <h3>模式说明</h3>
       <ul>

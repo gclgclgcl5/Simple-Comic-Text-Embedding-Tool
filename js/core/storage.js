@@ -164,7 +164,8 @@
           sourceBlob: record.blob,
           texts: [],
           draw: App.Gallery.createDrawState(),
-          selected: !!record.selected
+          selected: !!record.selected,
+          projectId: record.projectId || null
         });
       };
       el.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed: ' + record.name)); };
@@ -180,6 +181,7 @@
       w: record.w,
       h: record.h,
       selected: !!record.selected,
+      projectId: record.projectId || null,
       blob: record.blob
     });
   }
@@ -192,6 +194,7 @@
       w: img.w,
       h: img.h,
       selected: !!img.selected,
+      projectId: img.projectId || null,
       blob: img.sourceBlob
     });
   }
@@ -256,7 +259,13 @@
       currentId: State.currentId,
       selectedTextId: State.selectedTextId,
       uidSeq: State.uidSeq,
-      editMode: State.editMode
+      editMode: State.editMode,
+      currentProjectId: State.currentProjectId || null,
+      projects: (State.projects || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        selected: !!p.selected
+      }))
     }, SESSION_KEY);
   }
 
@@ -270,12 +279,30 @@
     await txDone(tx);
   }
 
+  function normalizeProjects(raw) {
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    const seenNames = new Set();
+    raw.forEach(p => {
+      if (!p || typeof p !== 'object') return;
+      if (typeof p.id !== 'string' || !p.id) return;
+      const name = typeof p.name === 'string' ? p.name.trim() : '';
+      if (!name || seenNames.has(name)) return;
+      seenNames.add(name);
+      out.push({ id: p.id, name, selected: !!p.selected });
+    });
+    return out;
+  }
+
   async function restoreSession() {
     if (!available || !db) return false;
     restoring = true;
     try {
       const imageRecords = await getAll('images');
-      if (!imageRecords.length) return false;
+      const session = await getOne('session', SESSION_KEY);
+      const projects = normalizeProjects(session && session.projects);
+
+      if (!imageRecords.length && !projects.length) return false;
 
       const fontRecords = await getAll('fonts');
       for (const f of fontRecords) {
@@ -287,10 +314,12 @@
       const editMap = new Map();
       (await getAll('edits')).forEach(e => editMap.set(e.imageId, e));
 
+      const projectIds = new Set(projects.map(p => p.id));
       const images = [];
       for (const rec of imageRecords) {
         try {
           const img = await loadImageFromBlob(rec);
+          if (img.projectId && !projectIds.has(img.projectId)) img.projectId = null;
           const edit = editMap.get(rec.id);
           if (edit) {
             img.texts = JSON.parse(JSON.stringify(edit.texts || []));
@@ -313,16 +342,19 @@
         }
       }
 
-      if (!images.length) return false;
+      if (!images.length && !projects.length) return false;
 
-      const session = await getOne('session', SESSION_KEY);
       const State = App.State;
       State.images = images;
+      State.projects = projects;
       const savedSelected = session && session.selectedTextId ? session.selectedTextId : null;
       const savedMode = session && session.editMode ? session.editMode : 'text';
       if (session && typeof session.uidSeq === 'number') State.uidSeq = session.uidSeq;
+      const savedProjectId = session && session.currentProjectId ? session.currentProjectId : null;
+      State.currentProjectId = (savedProjectId && projectIds.has(savedProjectId)) ? savedProjectId : null;
       State.currentId = (session && session.currentId && images.some(i => i.id === session.currentId))
-        ? session.currentId : images[0].id;
+        ? session.currentId
+        : (images.length ? images[0].id : null);
       State.selectedTextId = null;
 
       App.Gallery.renderThumbs();

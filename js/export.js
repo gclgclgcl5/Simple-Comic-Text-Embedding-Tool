@@ -2,7 +2,7 @@
 (function (App) {
   "use strict";
 
-  const { FONT, exportName, stamp, toast } = App.Utils;
+  const { exportName, stamp, toast } = App.Utils;
   const State = App.State;
   const { exportBtn, exportOneBtn } = App.Dom;
   const { makeZip } = App.Zip;
@@ -14,6 +14,16 @@
     while (used.has(n)) n = base + ' (' + (k++) + ')';
     used.add(n);
     return n;
+  }
+
+  function safeFolderName(name) {
+    return String(name || '工程').replace(/[\\/:*?"<>|]/g, '_').trim() || '工程';
+  }
+
+  function zipPartName(folder, imgName, used) {
+    const fileBase = exportName(imgName);
+    const base = folder ? (safeFolderName(folder) + '/' + fileBase) : fileBase;
+    return uniqueName(base, used) + '.png';
   }
 
   function download(blob, name) {
@@ -52,7 +62,7 @@
     for (const t of img.texts) {
       if (!t.text || !t.text.trim()) continue;
       const fs = Math.max(6, Math.round(t.fontPct * img.h));
-      const famRef = t.fontFamily ? ('"' + t.fontFamily + '"') : FONT;
+      const famRef = t.fontFamily ? ('"' + t.fontFamily + '"') : App.Utils.FONT;
       ctx.font = fs + 'px ' + famRef;
       if (t.vertical) {
         const cellH = Math.round(fs * 1.15);
@@ -112,17 +122,38 @@
     return '#' + [data[0], data[1], data[2]].map(v => v.toString(16).padStart(2, '0')).join('');
   }
 
+  function collectExportJobs() {
+    const jobs = [];
+    if (State.currentProjectId) {
+      const project = State.getProject(State.currentProjectId);
+      const folder = project ? project.name : null;
+      State.imagesInProject(State.currentProjectId)
+        .filter(i => i.selected)
+        .forEach(img => jobs.push({ img, folder }));
+      return jobs;
+    }
+    State.rootImages().filter(i => i.selected).forEach(img => {
+      jobs.push({ img, folder: null });
+    });
+    State.projects.filter(p => p.selected).forEach(project => {
+      State.imagesInProject(project.id).forEach(img => {
+        jobs.push({ img, folder: project.name });
+      });
+    });
+    return jobs;
+  }
+
   async function exportSelected() {
-    const list = State.images.filter(i => i.selected);
-    if (!list.length) return;
+    const jobs = collectExportJobs();
+    if (!jobs.length) return;
     exportBtn.disabled = true;
     exportOneBtn.disabled = true;
     try {
       const used = new Set(), parts = [];
-      for (let i = 0; i < list.length; i++) {
-        exportBtn.innerHTML = `导出中 ${i + 1}/${list.length}`;
-        const blob = await renderImage(list[i]);
-        parts.push({ name: uniqueName(exportName(list[i].name), used) + '.png', blob });
+      for (let i = 0; i < jobs.length; i++) {
+        exportBtn.innerHTML = `导出中 ${i + 1}/${jobs.length}`;
+        const blob = await renderImage(jobs[i].img);
+        parts.push({ name: zipPartName(jobs[i].folder, jobs[i].img.name, used), blob });
         await new Promise(r => setTimeout(r, 0));
       }
       const zip = await makeZip(parts);

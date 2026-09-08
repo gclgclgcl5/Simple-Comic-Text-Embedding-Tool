@@ -52,6 +52,8 @@
     toastEl: $('toast'),
     mirror: $('mirror'),
     clearAllBtn: $('clearAllBtn'),
+    createProjectBtn: $('createProjectBtn'),
+    checkAllText: $('checkAllText'),
     clearCacheBtn: $('clearCacheBtn'),
     editor: $('editor'),
     modeTextBtn: $('modeTextBtn'),

@@ -9,6 +9,8 @@
   const SHAPE_PRESET_MIN = 0.004;
 
   let images = [];
+  let projects = [];
+  let currentProjectId = null;
   let currentId = null;
   let selectedTextId = null;
   let uidSeq = 1;
@@ -26,6 +28,17 @@
   function getImage(id) { return images.find(i => i.id === id); }
 
   function current() { return getImage(currentId); }
+
+  function getProject(id) { return projects.find(p => p.id === id); }
+
+  function rootImages() {
+    return images.filter(i => !i.projectId);
+  }
+
+  function imagesInProject(projectId) {
+    if (!projectId) return [];
+    return images.filter(i => i.projectId === projectId);
+  }
 
   function saveLastStyle() {
     try { localStorage.setItem(STYLE_KEY, JSON.stringify(lastStyle)); } catch (e) {}
@@ -149,6 +162,10 @@
   App.State = {
     get images() { return images; },
     set images(v) { images = v; },
+    get projects() { return projects; },
+    set projects(v) { projects = v; },
+    get currentProjectId() { return currentProjectId; },
+    set currentProjectId(v) { currentProjectId = v; },
     get currentId() { return currentId; },
     set currentId(v) { currentId = v; },
     get selectedTextId() { return selectedTextId; },
@@ -168,6 +185,9 @@
     uid,
     getImage,
     current,
+    getProject,
+    rootImages,
+    imagesInProject,
     saveLastStyle,
     loadLastStyle,
     validHex,

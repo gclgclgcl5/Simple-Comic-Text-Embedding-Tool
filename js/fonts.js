@@ -9,8 +9,7 @@
 
   const BUNDLED_FONTS = [
     { family: '方正卡通简体', files: ['字体样式/方正卡通简体/方正卡通简体/方正卡通_GBK.ttf'] },
-    { family: '文渊圆体-常规', files: ['字体样式/文渊圆体/文渊圆体/WenYuanRoundedSC-TTF/WenYuanRoundedSC-Regular.ttf'] },
-    { family: '文渊圆体-中', files: ['字体样式/文渊圆体/文渊圆体/WenYuanRoundedSC-TTF/WenYuanRoundedSC-Medium.ttf'] },
+    { family: '宋体', files: ['字体样式/宋体/宋体/SourceHanSerifCN-Bold.otf'] },
   ];
 
   const bundledFamilies = new Set(BUNDLED_FONTS.map(f => f.family));
