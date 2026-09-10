@@ -600,6 +600,14 @@ body.drag-active .dropzone {
   outline-offset: 0;
 }
 
+.draw-smartfill-preview {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 1.5px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .shape-select-box {
   position: absolute;
   inset: 0;

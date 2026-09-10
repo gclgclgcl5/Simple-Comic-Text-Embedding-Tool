@@ -17,6 +17,8 @@
 
   let pointer = null;
   let previewShape = null;
+  /** @type {{ x0: number, y0: number, x1: number, y1: number } | null} 归一化轴对齐选区 */
+  let smartfillPreview = null;
   let lastToolBeforeEyedropper = 'brush';
 
   function ensureDraw(img) {
@@ -251,6 +253,7 @@
     const img = State.current();
     if (img) ensureDraw(img).selectedShapeId = null;
     previewShape = null;
+    smartfillPreview = null;
     if (img) syncDrawPreview(img);
     if (App.DrawToolbar) App.DrawToolbar.updateDeleteButton();
   }
@@ -303,6 +306,18 @@
       }
       drawShapeLayer.appendChild(el);
     });
+    if (smartfillPreview) {
+      const { x0, y0, x1, y1 } = smartfillPreview;
+      const l = Math.min(x0, x1), t = Math.min(y0, y1);
+      const r = Math.max(x0, x1), b = Math.max(y0, y1);
+      const el = document.createElement('div');
+      el.className = 'draw-smartfill-preview' + (smartfillPreview.bubble ? ' bubble' : '');
+      el.style.left = (l * sw) + 'px';
+      el.style.top = (t * sh) + 'px';
+      el.style.width = ((r - l) * sw) + 'px';
+      el.style.height = ((b - t) * sh) + 'px';
+      drawShapeLayer.appendChild(el);
+    }
     updatePointerEvents();
   }
 
@@ -319,8 +334,80 @@
     const img = State.current();
     if (!img) return;
     const tool = ensureDraw(img).tool;
-    const cursors = { brush: 'crosshair', eraser: 'crosshair', rect: 'crosshair', ellipse: 'crosshair', eyedropper: 'crosshair' };
+    const cursors = {
+      brush: 'crosshair', eraser: 'crosshair', rect: 'crosshair', ellipse: 'crosshair',
+      eyedropper: 'crosshair', smartfill: 'crosshair', 'smartfill-bubble': 'crosshair'
+    };
     stage.style.cursor = cursors[tool] || 'default';
+  }
+
+  function isSmartFillTool(tool) {
+    return tool === 'smartfill' || tool === 'smartfill-bubble';
+  }
+
+  /**
+   * 在 ROI 内智能遮盖。mode: 'rect' | 'bubble'
+   * @param {{ x0: number, y0: number, x1: number, y1: number }} norm 归一化选区
+   */
+  function applySmartFill(img, norm, mode) {
+    if (!App.SmartFill) return false;
+    const x0 = Math.floor(Math.min(norm.x0, norm.x1) * img.w);
+    const y0 = Math.floor(Math.min(norm.y0, norm.y1) * img.h);
+    const x1 = Math.ceil(Math.max(norm.x0, norm.x1) * img.w);
+    const y1 = Math.ceil(Math.max(norm.y0, norm.y1) * img.h);
+    const rx = Math.max(0, x0);
+    const ry = Math.max(0, y0);
+    const rx1 = Math.min(img.w, x1);
+    const ry1 = Math.min(img.h, y1);
+    const roiW = rx1 - rx;
+    const roiH = ry1 - ry;
+    if (roiW < 4 || roiH < 4) return false;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.w;
+    canvas.height = img.h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img.imgEl, 0, 0, img.w, img.h);
+    renderToExport(ctx, img);
+
+    let imageData;
+    try {
+      imageData = ctx.getImageData(rx, ry, roiW, roiH);
+    } catch (e) {
+      console.error('smartfill getImageData', e);
+      if (App.Utils && App.Utils.toast) App.Utils.toast('无法读取选区像素');
+      return false;
+    }
+
+    const rctx = ensureRaster(img).getContext('2d');
+
+    if (mode === 'bubble') {
+      const bubble = App.SmartFill.detectBubbleMask(imageData, roiW, roiH);
+      if (!bubble) {
+        if (App.Utils && App.Utils.toast) {
+          App.Utils.toast('未能识别气泡内部，可改用矩形智能遮盖或手涂');
+        }
+        return false;
+      }
+      const color = App.SmartFill.sampleMaskColor(
+        imageData, roiW, roiH, bubble.mask, bubble.threshold
+      );
+      const patch = rctx.getImageData(rx, ry, roiW, roiH);
+      App.SmartFill.paintMaskIntoImageData(patch, bubble.mask, color);
+      rctx.putImageData(patch, rx, ry);
+      return true;
+    }
+
+    const cover = App.SmartFill.detectCoverRect(imageData, roiW, roiH);
+    if (!cover) {
+      if (App.Utils && App.Utils.toast) App.Utils.toast('未检测到文字，可改用手涂或矩形');
+      return false;
+    }
+
+    const color = App.SmartFill.sampleRingColor(imageData, roiW, roiH, cover, cover.threshold);
+    rctx.fillStyle = color;
+    rctx.fillRect(rx + cover.x, ry + cover.y, cover.w, cover.h);
+    return true;
   }
 
   function initDrawLayers() {
@@ -388,6 +475,20 @@
       return;
     }
 
+    if (isSmartFillTool(d.tool)) {
+      e.preventDefault();
+      deselectShape();
+      smartfillPreview = { x0: p.nx, y0: p.ny, x1: p.nx, y1: p.ny, bubble: d.tool === 'smartfill-bubble' };
+      pointer = {
+        type: 'smartfill',
+        mode: d.tool === 'smartfill-bubble' ? 'bubble' : 'rect',
+        startNX: p.nx, startNY: p.ny,
+        before: saveSnapshot(img)
+      };
+      syncDrawPreview(img);
+      return;
+    }
+
     if (d.tool === 'brush' || d.tool === 'eraser') {
       e.preventDefault();
       const before = saveSnapshot(img);
@@ -449,6 +550,16 @@
       return;
     }
 
+    if (pointer.type === 'smartfill') {
+      smartfillPreview = {
+        x0: pointer.startNX, y0: pointer.startNY,
+        x1: p.nx, y1: p.ny,
+        bubble: pointer.mode === 'bubble'
+      };
+      syncDrawPreview(img);
+      return;
+    }
+
     if (pointer.type === 'create') {
       const l = Math.min(pointer.startNX, p.nx);
       const t = Math.min(pointer.startNY, p.ny);
@@ -492,6 +603,25 @@
       pushHistory(img, pointer.before);
       pointer = null;
       persistDraw();
+      return;
+    }
+
+    if (pointer.type === 'smartfill') {
+      const norm = smartfillPreview || {
+        x0: pointer.startNX, y0: pointer.startNY,
+        x1: pointer.startNX, y1: pointer.startNY
+      };
+      smartfillPreview = null;
+      const nw = Math.abs(norm.x1 - norm.x0);
+      const nh = Math.abs(norm.y1 - norm.y0);
+      let applied = false;
+      if (nw >= MIN_SHAPE / 2 && nh >= MIN_SHAPE / 2) {
+        applied = applySmartFill(img, norm, pointer.mode || 'rect');
+      }
+      if (applied && pointer.before) pushHistory(img, pointer.before);
+      syncDrawPreview(img);
+      pointer = null;
+      if (applied) persistDraw();
       return;
     }
 

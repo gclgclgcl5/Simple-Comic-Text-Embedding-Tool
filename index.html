@@ -246,6 +246,12 @@
               <button type="button" class="draw-tool" data-tool="ellipse" title="椭圆">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-ellipse"/></svg>
               </button>
+              <button type="button" class="draw-tool" data-tool="smartfill" title="矩形智能遮盖：粗框后按文字并集矩形纯色遮盖">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-smartfill"/></svg>
+              </button>
+              <button type="button" class="draw-tool" data-tool="smartfill-bubble" title="异形泡智能遮盖：粗框后沿气泡描边填充内部（适合圆/歪泡）">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-smartfill-bubble"/></svg>
+              </button>
               <button type="button" class="draw-tool" data-tool="eyedropper" title="取色器">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-eyedropper"/></svg>
               </button>
@@ -357,6 +363,7 @@
         <li><strong>嵌字模式</strong>：选中文字框后在右侧修改样式；无选中时可设置默认样式</li>
         <li><strong>旋转模式</strong>：选中横排文字后可在面板输入/步进角度，或点「开始旋转」拖动绕中心旋转（±180°）；松手后点 ✓ 确认并退出，点 × 还原进入前角度；「退出旋转模式」或 Esc 取消未确认角度</li>
         <li><strong>画图模式</strong>：用画笔或形状遮盖原图文字，再切换回嵌字模式添加文字</li>
+        <li><strong>智能遮盖</strong>（画图工具）：<em>矩形</em>按文字并集矩形填充；<em>异形泡</em>沿气泡描边填充内部（适合圆/歪泡）。粗框即可，不准可 Ctrl+Z 后手涂</li>
         <li><strong>样式预设</strong>（嵌字面板）：选中文字框后点空白槽保存（含旋转角度）；点有内容槽套用到选中文字框；× 删除</li>
         <li><strong>图形预设</strong>（画图面板）：选中图形后点空白槽保存；点有内容槽在图片中心插入；× 删除</li>
       </ul>
@@ -399,6 +406,8 @@
   <symbol id="icon-eraser" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16l11-11 5 5-9 9"/><path d="M6.5 17.5l2-2"/></symbol>
   <symbol id="icon-rect" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="0"/></symbol>
   <symbol id="icon-ellipse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="10" ry="7"/></symbol>
+  <symbol id="icon-smartfill" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="0" stroke-dasharray="3 2"/><rect x="7" y="8" width="10" height="8" fill="currentColor" stroke="none" opacity="0.35"/><path d="M9 12h6M9 15h4"/></symbol>
+  <symbol id="icon-smartfill-bubble" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="11" rx="8" ry="7" stroke-dasharray="3 2"/><ellipse cx="12" cy="11" rx="4.5" ry="3.5" fill="currentColor" stroke="none" opacity="0.35"/><path d="M10 18l2 3 2-3"/></symbol>
   <symbol id="icon-eyedropper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22l1-1h3l9-9"/><path d="M15 6l3 3"/><path d="M8 13l-5 5a2 2 0 0 0 2.83 2.83L11 16"/></symbol>
   <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></symbol>
   <symbol id="icon-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
@@ -415,6 +424,7 @@
 <script src="js/editor.js" defer></script>
 <script src="js/core/color-pick.js" defer></script>
 <script src="js/toolbar.js" defer></script>
+<script src="js/core/smart-fill.js" defer></script>
 <script src="js/draw.js" defer></script>
 <script src="js/draw-toolbar.js" defer></script>
 <script src="js/shape-presets.js" defer></script>
