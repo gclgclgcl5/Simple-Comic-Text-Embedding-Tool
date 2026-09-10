@@ -7,6 +7,8 @@
   const { canvasArea, stage, stageImg, emptyEditor, currentName, addTextBtn, exportOneBtn, tbDelBtn } = App.Dom;
 
   const TA_PAD_X = 6, TA_PAD_Y = 1, LH_RATIO = 1.25;
+  /** 换行测宽相对字号的余量，避免贴边框在导出时因字体 hinting 多断一行 */
+  const WRAP_SLACK_EM = 0.25;
   const BOLD_RATIO = 0.05;
   const HISTORY_MAX = 50;
   const MIN_TEXT_W = 40;
@@ -303,8 +305,18 @@
     return Math.ceil((t.bold ? fs * BOLD_RATIO : 0) * 2 + (t.stroke ? Math.max(0.5, t.strokePct * fs) : 0)) + 2;
   }
 
+  /** 框体总内边距（含描边余量），用于定框宽 */
   function textInnerPad(t, fs) {
     return TA_PAD_X * 2 + measureInk(t, fs);
+  }
+
+  /**
+   * 换行用内容宽度：与 textarea 的 padding(左右各 6px)对齐，
+   * 并加字号相关余量，避免 CSS 能放下、Canvas measureText 多 1px 就断行。
+   */
+  function wrapContentWidth(boxW, fs) {
+    const slack = Math.max(0.5, fs * WRAP_SLACK_EM);
+    return Math.max(10, boxW - TA_PAD_X * 2 + slack);
   }
 
   function isWidthFixed(t) {
@@ -343,11 +355,12 @@
     if (isWidthFixed(t)) {
       boxW = Math.max(MIN_TEXT_W, Math.min(maxBoxW, (t.widthPct || 0.4) * sw));
     } else {
-      const contentW = Math.min(maxLineW, Math.max(10, maxBoxW - innerPad));
+      // 自动宽度略留余量，避免框宽贴死最长行导致导出多断行
+      const contentW = Math.min(maxLineW + Math.ceil(fs * WRAP_SLACK_EM), Math.max(10, maxBoxW - innerPad));
       boxW = Math.min(Math.max(contentW + innerPad, MIN_TEXT_W), maxBoxW);
     }
 
-    const contentW = Math.max(10, boxW - innerPad);
+    const contentW = wrapContentWidth(boxW, fs);
     const naturalH = naturalBoxHeight(t, fs, contentW, ctx);
     let boxH;
     if (isHeightFixed(t)) {
@@ -727,7 +740,7 @@
       t.widthPct = width / sw;
       t.x = (left + width / 2) / sw;
       if (!isHeightFixed(t)) {
-        const contentW = Math.max(10, width - textInnerPad(t, fs));
+        const contentW = wrapContentWidth(width, fs);
         height = naturalBoxHeight(t, fs, contentW, ctx);
         top = keepCenterY - height / 2;
         t.heightMode = 'auto';
@@ -937,16 +950,18 @@
 
   function wrapText(text, fs, maxW, ctx) {
     const lines = [];
+    // 亚像素容差：贴边测宽时避免因浮点/hinting 多断一字
+    const limit = maxW + 0.5;
     for (const p of text.split(/\r?\n/)) {
       const tokens = p.split(/(\s+)/);
       let cur = '';
       for (const tk of tokens) {
         const test = cur + tk;
-        if (ctx.measureText(test).width <= maxW) { cur = test; continue; }
+        if (ctx.measureText(test).width <= limit) { cur = test; continue; }
         if (cur) { lines.push(cur); cur = tk; continue; }
         let sub = '';
         for (const ch of tk) {
-          if (sub && ctx.measureText(sub + ch).width > maxW) { lines.push(sub); sub = ch; }
+          if (sub && ctx.measureText(sub + ch).width > limit) { lines.push(sub); sub = ch; }
           else sub += ch;
         }
         cur = sub;
@@ -956,15 +971,31 @@
     return lines;
   }
 
+  /**
+   * 按舞台坐标系计算换行（与面板框宽一致），供导出绘制使用，避免原图像素下多断行。
+   */
+  function wrapTextForDisplay(t, text) {
+    const sw = Math.max(1, stage.clientWidth || 1);
+    const sh = Math.max(1, stage.clientHeight || 1);
+    const fs = Math.max(6, Math.round(t.fontPct * sh));
+    const boxW = Math.max(10, (t.widthPct || 0.4) * sw);
+    const maxW = wrapContentWidth(boxW, fs);
+    const fontFamily = t.fontFamily || State.DEFAULT_FONT;
+    const famRef = fontFamily ? ('"' + fontFamily + '"') : FONT;
+    const ctx = measureCtx();
+    ctx.font = fs + 'px ' + famRef;
+    return wrapText(text, fs, maxW, ctx);
+  }
+
   App.Editor = {
     selectImage, layoutStage, stageH, syncPropsUI,
     applyPreviewWeight, syncBox, renderBoxes, onBoxPointerDown,
-    selectBox, clearSelection, addText, removeText, wrapText,
+    selectBox, clearSelection, addText, removeText, wrapText, wrapTextForDisplay,
     pushHistory, pushHistoryDebounced, undo, redo,
-    textInnerPad, measureInk,
+    textInnerPad, wrapContentWidth, measureInk,
     startRotate, exitRotate, confirmRotate, cancelRotateDraft,
     abortRotateIfNeeded, isRotating, getTextRotation, ensureTextRotation,
     normalizeRotation, getRotateDraft, getDisplayRotation, setRotateDraft,
-    BOLD_RATIO, FONT: () => FONT, LH_RATIO
+    BOLD_RATIO, FONT: () => FONT, LH_RATIO, TA_PAD_X, WRAP_SLACK_EM
   };
 })(window.App = window.App || {});

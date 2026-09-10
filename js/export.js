@@ -2,11 +2,11 @@
 (function (App) {
   "use strict";
 
-  const { exportName, stamp, toast } = App.Utils;
+  const { stamp, toast, exportName } = App.Utils;
   const State = App.State;
   const { exportBtn, exportOneBtn } = App.Dom;
   const { makeZip } = App.Zip;
-  const { wrapText, textInnerPad } = App.Editor;
+  const { wrapTextForDisplay } = App.Editor;
   const BOLD_RATIO = 0.05;
 
   function uniqueName(base, used) {
@@ -53,11 +53,28 @@
   }
 
   async function renderTexts(ctx, img) {
-    const used = new Set();
-    img.texts.forEach(t => { if (t.fontFamily) used.add(t.fontFamily); });
-    for (const fam of used) {
-      try { await document.fonts.load('16px "' + fam + '"'); } catch (e) {}
+    const fontJobs = [];
+    const seen = new Set();
+    for (const t of img.texts) {
+      if (!t.fontFamily) continue;
+      const fs = Math.max(6, Math.round(t.fontPct * img.h));
+      const key = t.fontFamily + '|' + fs;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fontJobs.push(document.fonts.load(fs + 'px "' + t.fontFamily + '"').catch(() => {}));
     }
+    // 同时按舞台字号预热，供 wrapTextForDisplay 测宽
+    const sh = (App.Dom.stage && App.Dom.stage.clientHeight) || img.h;
+    for (const t of img.texts) {
+      if (!t.fontFamily) continue;
+      const fsStage = Math.max(6, Math.round(t.fontPct * sh));
+      const key = t.fontFamily + '|s' + fsStage;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fontJobs.push(document.fonts.load(fsStage + 'px "' + t.fontFamily + '"').catch(() => {}));
+    }
+    await Promise.all(fontJobs);
+
     ctx.textAlign = 'center';
     for (const t of img.texts) {
       if (!t.text || !t.text.trim()) continue;
@@ -79,9 +96,8 @@
           }
         }
       } else {
-        const boxW = Math.max(10, t.widthPct * img.w);
-        const innerW = Math.max(10, boxW - textInnerPad(t, fs));
-        const lines = wrapText(t.text, fs, innerW, ctx);
+        // 在舞台坐标系换行，与操作面板框宽一致，再按原图像素绘制
+        const lines = wrapTextForDisplay(t, t.text);
         const lh = fs * 1.25;
         const cx = t.x * img.w, cy = t.y * img.h;
         const ang = ((typeof t.rotation === 'number' ? t.rotation : 0) * Math.PI) / 180;
