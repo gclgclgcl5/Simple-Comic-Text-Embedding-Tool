@@ -57,7 +57,12 @@
   function syncSelectUI() {
     const sel = exportableCount();
     exportBtn.disabled = sel === 0;
-    exportBtn.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>导出所选 (${sel})`;
+    const team = State.isTeamMode && State.isTeamMode();
+    const label = team ? `导出工程包 (${sel})` : `导出所选 (${sel})`;
+    exportBtn.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>${label}`;
+    exportBtn.title = team
+      ? '将所选图片导出为可继续编辑的工程包 ZIP'
+      : '将所选图片合成为一个 ZIP 下载';
     const checkAllText = App.Dom.checkAllText;
     if (State.currentProjectId) {
       const imgs = State.imagesInProject(State.currentProjectId);

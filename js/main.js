@@ -6,7 +6,8 @@
   const State = App.State;
   const {
     fileInput, checkAll, clearAllBtn, createProjectBtn, clearCacheBtn, addTextBtn, stage, canvasArea,
-    fontUploadBtn, fontInput, exportOneBtn, exportBtn, tbDelBtn, tbBold
+    fontUploadBtn, fontInput, exportOneBtn, exportBtn, tbDelBtn, tbBold,
+    teamModeToggle, projectImportInput
   } = App.Dom;
 
   let peekingOriginal = false;
@@ -69,6 +70,9 @@
     if (!restored) App.Toolbar.syncDefaultStylePanel();
     App.Draw.bindPointerEvents();
 
+    State.loadTeamMode();
+    if (App.ProjectIO) App.ProjectIO.syncExportLabels();
+
     if (restored) toast('已恢复上次工作进度');
 
     fileInput.addEventListener('change', () => {
@@ -76,13 +80,49 @@
       fileInput.value = '';
     });
 
+    if (teamModeToggle) {
+      teamModeToggle.checked = State.isTeamMode();
+      teamModeToggle.addEventListener('change', () => {
+        State.setTeamMode(teamModeToggle.checked);
+        App.ProjectIO.syncExportLabels();
+        toast(State.isTeamMode() ? '已开启汉化组模式：导出为工程包' : '已关闭汉化组模式：导出成品图');
+      });
+    }
+
+    if (projectImportInput) {
+      projectImportInput.addEventListener('change', async () => {
+        const file = projectImportInput.files && projectImportInput.files[0];
+        projectImportInput.value = '';
+        if (!file) return;
+        try {
+          await App.ProjectIO.importZip(file);
+        } catch (err) {
+          console.error(err);
+          toast('导入失败：' + (err && err.message ? err.message : err), 3200);
+        }
+      });
+    }
+
     window.addEventListener('dragover', e => e.preventDefault());
-    window.addEventListener('drop', e => {
+    window.addEventListener('drop', async e => {
       e.preventDefault();
       const files = [...e.dataTransfer.files];
       const imgs = files.filter(f => f.type.startsWith('image/'));
-      const fonts = files.filter(f => /\.(ttf|otf|woff2?|zip)$/i.test(f.name));
+      const zips = files.filter(f => /\.zip$/i.test(f.name));
+      const fonts = files.filter(f => /\.(ttf|otf|woff2?)$/i.test(f.name));
       if (imgs.length) App.Gallery.addFiles(imgs);
+      for (const z of zips) {
+        try {
+          if (await App.ProjectIO.isProjectZipFile(z)) {
+            await App.ProjectIO.importZip(z);
+          } else {
+            await App.Fonts.addFontFile(z);
+          }
+        } catch (err) {
+          console.error(err);
+          toast('处理压缩包失败：' + (err && err.message ? err.message : err), 3200);
+        }
+      }
       if (fonts.length) fonts.forEach(f => App.Fonts.addFontFile(f));
     });
 

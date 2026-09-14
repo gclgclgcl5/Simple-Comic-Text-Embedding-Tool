@@ -138,9 +138,30 @@
   }
 
   let editMode = 'text';
+  const TEAM_MODE_KEY = 'dsh_team_mode_v1';
+  let teamMode = false;
 
   function isTextMode() { return editMode === 'text'; }
   function isDrawMode() { return editMode === 'draw'; }
+
+  function isTeamMode() { return !!teamMode; }
+
+  function loadTeamMode() {
+    try {
+      teamMode = localStorage.getItem(TEAM_MODE_KEY) === '1';
+    } catch (e) {
+      teamMode = false;
+    }
+    return teamMode;
+  }
+
+  function setTeamMode(on) {
+    teamMode = !!on;
+    try { localStorage.setItem(TEAM_MODE_KEY, teamMode ? '1' : '0'); } catch (e) {}
+    if (App.Gallery && App.Gallery.syncSelectUI) App.Gallery.syncSelectUI();
+    if (App.ProjectIO && App.ProjectIO.syncExportLabels) App.ProjectIO.syncExportLabels();
+    return teamMode;
+  }
 
   function setEditMode(mode) {
     if (mode !== 'text' && mode !== 'draw') return;
@@ -200,6 +221,10 @@
     get editMode() { return editMode; },
     isTextMode,
     isDrawMode,
-    setEditMode
+    setEditMode,
+    TEAM_MODE_KEY,
+    isTeamMode,
+    loadTeamMode,
+    setTeamMode
   };
 })(window.App = window.App || {});

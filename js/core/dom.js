@@ -55,6 +55,8 @@
     createProjectBtn: $('createProjectBtn'),
     checkAllText: $('checkAllText'),
     clearCacheBtn: $('clearCacheBtn'),
+    teamModeToggle: $('teamModeToggle'),
+    projectImportInput: $('projectImportInput'),
     editor: $('editor'),
     modeTextBtn: $('modeTextBtn'),
     modeDrawBtn: $('modeDrawBtn'),

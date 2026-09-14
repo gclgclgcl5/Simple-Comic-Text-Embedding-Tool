@@ -22,7 +22,6 @@
     </div>
   </div>
   <div class="header-actions">
-    <button type="button" class="btn btn-mini" id="clearCacheBtn" title="清除本地保存的图片、编辑与上传字体">清除缓存</button>
     <button type="button" class="icon-btn" id="themeToggleBtn" title="切换主题" aria-label="切换主题">
       <svg class="icon icon-sun" aria-hidden="true"><use href="#icon-sun"/></svg>
       <svg class="icon icon-moon" hidden aria-hidden="true"><use href="#icon-moon"/></svg>
@@ -30,11 +29,12 @@
     <button type="button" class="icon-btn" id="helpBtn" title="使用帮助 (?)" aria-label="使用帮助">
       <svg class="icon" aria-hidden="true"><use href="#icon-help"/></svg>
     </button>
-    <label class="btn" title="支持多选，也可以直接把图片拖进窗口">
-      <svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg>
-      上传图片
-      <input type="file" id="fileInput" accept="image/*" multiple hidden>
-    </label>
+    <details class="header-more">
+      <summary class="icon-btn" title="更多" aria-label="更多">⋯</summary>
+      <div class="header-more-menu">
+        <button type="button" class="btn btn-mini btn-block" id="clearCacheBtn" title="清除本地保存的图片、工程、编辑与上传字体">清除缓存</button>
+      </div>
+    </details>
   </div>
 </header>
 
@@ -47,7 +47,18 @@
       </button>
     </div>
     <div class="gallery-toolbar">
-      <button type="button" class="btn primary btn-block" id="createProjectBtn" title="创建工程文件夹">新建工程</button>
+      <div class="gallery-intake">
+        <label class="btn primary btn-block" title="支持多选，也可以直接把图片拖进窗口">
+          <svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg>
+          上传图片
+          <input type="file" id="fileInput" accept="image/*" multiple hidden>
+        </label>
+        <label class="btn btn-block" title="导入可继续编辑的嵌字工程包 ZIP">
+          导入工程
+          <input type="file" id="projectImportInput" accept=".zip,application/zip" hidden>
+        </label>
+      </div>
+      <button type="button" class="btn btn-block" id="createProjectBtn" title="创建工程文件夹">新建工程</button>
       <div class="gallery-toolbar-row">
         <label id="checkAllLabel" title="仅全选根目录散图，不选工程"><input type="checkbox" id="checkAll" class="field-checkbox"> <span id="checkAllText">全选</span></label>
         <div class="head-right">
@@ -57,9 +68,13 @@
       </div>
     </div>
     <div id="gallery">
-      <div class="empty-side" id="emptySide">还没有图片<br>点击上方「上传图片」<br>或把图片、字体拖进窗口</div>
+      <div class="empty-side" id="emptySide">还没有图片<br>点上方「上传图片」或「导入工程」<br>也可把文件拖进窗口</div>
     </div>
     <div class="gallery-footer">
+      <label class="team-mode-toggle team-mode-toggle-block" title="开启后导出为可继续编辑的工程包；关闭则导出成品 PNG">
+        <input type="checkbox" id="teamModeToggle">
+        <span>汉化组模式（导出工程包）</span>
+      </label>
       <button class="btn primary btn-block" id="exportBtn" disabled title="将所选图片合成为一个 ZIP 下载">
         <svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>
         导出所选 (0)
@@ -77,14 +92,9 @@
           <svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>
           添加文字
         </button>
-        <button class="btn" id="fontUploadBtn" title="支持 ttf / otf / woff / woff2 / zip（自动解压找字体）">
-          <svg class="icon" aria-hidden="true"><use href="#icon-font"/></svg>
-          上传字体
-        </button>
-        <input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2,.zip" multiple hidden>
         <button class="btn" id="exportOneBtn" disabled>
           <svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg>
-          导出当前
+          导出这张
         </button>
       </div>
     </div>
@@ -98,9 +108,9 @@
         <div class="dropzone" id="dropzone">
           <svg class="dropzone-icon" aria-hidden="true"><use href="#icon-upload"/></svg>
           <div class="dropzone-title">拖拽图片或字体到此处</div>
-          <div class="dropzone-desc">图片：JPG、PNG、WebP 等（可多选）<br>字体：TTF、OTF、WOFF、ZIP<br>也可点击上方「上传图片」或「上传字体」</div>
+          <div class="dropzone-desc">图片：JPG、PNG、WebP 等（可多选）<br>字体 / 工程包：TTF、OTF、WOFF、ZIP<br>也可使用左侧「上传图片」或「导入工程」</div>
         </div>
-        <p class="empty-hint">在左侧选择图片后开始嵌字，按 <kbd>?</kbd> 查看帮助</p>
+        <p class="empty-hint">三步：上传图片 → 添加文字 → 导出；按 <kbd>?</kbd> 查看帮助</p>
       </div>
     </div>
   </section>
@@ -168,6 +178,8 @@
           <div class="panel-section">
             <div class="panel-section-title">字体</div>
             <label title="文字字体"><select id="tbFont" class="field-select"></select></label>
+            <button type="button" class="btn btn-mini btn-block font-upload-btn" id="fontUploadBtn" title="支持 ttf / otf / woff / woff2 / zip（自动解压找字体）">上传字体</button>
+            <input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2,.zip" multiple hidden>
           </div>
           <div class="panel-section">
             <div class="panel-section-title">样式</div>
@@ -346,17 +358,13 @@
       <h3>Created by 故伦德里</h3>
       <h3>基本流程</h3>
       <ol>
-        <li>上传图片：点击「上传图片」，或把图片拖进窗口（支持多选）</li>
-        <li>上传字体：点击「上传字体」，或把 TTF / OTF / WOFF / ZIP 字体文件拖进窗口</li>
+        <li>上传图片：左侧图库「上传图片」，或拖进窗口</li>
+        <li>（可选）导入工程：图库「导入工程」或拖入工程包 ZIP</li>
         <li>选择图片：点左侧缩略图进入编辑区</li>
-        <li>添加文字：双击图片任意位置，或点「添加文字」</li>
-        <li>编辑文字：选中文字框后，在文字区内直接点击输入、拖选文字</li>
-        <li>取色：点颜色旁的取色器按钮，再在图片上点击吸取颜色（文字色/描边色）</li>
-        <li>移动文字框：拖动顶部条，或左/右/底边距条</li>
-        <li>缩放文字框：拖动八点手柄（横排）</li>
-        <li>设置样式：在右侧属性面板设置颜色、字号、字体、竖排、描边</li>
-        <li>工程文件夹：点「新建工程」命名；双击进入；工程内导入按 1.png、2.png… 命名；可将根目录散图拖入工程</li>
-        <li>导出：根目录勾选散图与工程后导出 ZIP（工程进子文件夹，散图在根）；工程内仅导出当前勾选图片；或点「导出当前」单张导出</li>
+        <li>添加文字：双击图片或点「添加文字」</li>
+        <li>编辑文字：在文字区内输入；右侧属性改颜色、字号、字体等</li>
+        <li>上传字体：右侧属性「字体」区的「上传字体」</li>
+        <li>导出：图库底「导出所选」或工作区「导出这张」；需要交接编辑时打开「汉化组模式」</li>
       </ol>
       <h3>模式说明</h3>
       <ul>
@@ -364,6 +372,7 @@
         <li><strong>旋转模式</strong>：选中横排文字后可在面板输入/步进角度，或点「开始旋转」拖动绕中心旋转（±180°）；松手后点 ✓ 确认并退出，点 × 还原进入前角度；「退出旋转模式」或 Esc 取消未确认角度</li>
         <li><strong>画图模式</strong>：用画笔或形状遮盖原图文字，再切换回嵌字模式添加文字</li>
         <li><strong>智能遮盖</strong>（画图工具）：<em>矩形</em>按文字并集矩形填充；<em>异形泡</em>沿气泡描边填充内部（适合圆/歪泡）。粗框即可，不准可 Ctrl+Z 后手涂</li>
+        <li><strong>汉化组模式</strong>：在图库底部开启后，「导出这张 / 导出所选」改为导出工程包 ZIP；关闭则仍导出成品 PNG。导入工程在图库顶部，与模式开关无关</li>
         <li><strong>样式预设</strong>（嵌字面板）：选中文字框后点空白槽保存（含旋转角度）；点有内容槽套用到选中文字框；× 删除</li>
         <li><strong>图形预设</strong>（画图面板）：选中图形后点空白槽保存；点有内容槽在图片中心插入；× 删除</li>
       </ul>
@@ -428,6 +437,7 @@
 <script src="js/draw.js" defer></script>
 <script src="js/draw-toolbar.js" defer></script>
 <script src="js/shape-presets.js" defer></script>
+<script src="js/project-io.js" defer></script>
 <script src="js/export.js" defer></script>
 <script src="js/main.js" defer></script>
 </body>

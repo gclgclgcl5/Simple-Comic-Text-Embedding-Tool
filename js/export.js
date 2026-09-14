@@ -165,6 +165,11 @@
     exportBtn.disabled = true;
     exportOneBtn.disabled = true;
     try {
+      if (State.isTeamMode()) {
+        const images = jobs.map(j => j.img);
+        await App.ProjectIO.exportZip(images, { progressEl: exportBtn });
+        return;
+      }
       const used = new Set(), parts = [];
       for (let i = 0; i < jobs.length; i++) {
         exportBtn.innerHTML = `导出中 ${i + 1}/${jobs.length}`;
@@ -189,13 +194,24 @@
     if (!img) return;
     exportOneBtn.disabled = true;
     try {
+      if (State.isTeamMode()) {
+        await App.ProjectIO.exportZip([img]);
+        return;
+      }
       const blob = await renderImage(img);
       download(blob, exportName(img.name) + '.png');
       toast('✅ 已导出当前图片');
+    } catch (err) {
+      console.error(err);
+      toast('❌ 导出失败：' + (err && err.message ? err.message : err), 3200);
     } finally {
       exportOneBtn.disabled = false;
+      if (App.ProjectIO) App.ProjectIO.syncExportLabels();
     }
   }
 
-  App.Export = { renderImage, renderTexts, sampleColorAt, exportSelected, exportCurrent, download, uniqueName };
+  App.Export = {
+    renderImage, renderTexts, sampleColorAt, exportSelected, exportCurrent,
+    download, uniqueName, collectExportJobs
+  };
 })(window.App = window.App || {});

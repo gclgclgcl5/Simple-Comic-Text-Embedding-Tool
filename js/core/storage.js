@@ -252,6 +252,11 @@
     await put('fonts', { family, fileName: fileName || family, data: buf });
   }
 
+  async function getFont(family) {
+    if (!family || !available || !db) return null;
+    return getOne('fonts', family);
+  }
+
   async function saveSession() {
     if (!available || restoring) return;
     const State = App.State;
@@ -399,11 +404,14 @@
     saveEdit,
     scheduleSaveEdit,
     flushSaveEdit,
+    snapshotEdit,
     saveFont,
+    getFont,
     saveSession,
     restoreSession,
     clearAll,
     canvasToBlob,
+    canvasHasInk,
     restoreRaster,
     initFlushHooks
   };

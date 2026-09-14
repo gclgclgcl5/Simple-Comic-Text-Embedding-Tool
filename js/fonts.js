@@ -10,6 +10,10 @@
   const BUNDLED_FONTS = [
     { family: '方正卡通简体', files: ['字体样式/方正卡通简体/方正卡通简体/方正卡通_GBK.ttf'] },
     { family: '宋体', files: ['字体样式/宋体/宋体/SourceHanSerifCN-Bold.otf'] },
+    { family: '方正楷体简体', files: ['字体样式/方正楷体简体/方正楷体简体/方正楷体简体.ttf'] },
+    { family: '悠哉-细', files: ['字体样式/悠哉字体/悠哉字体/悠哉-细.ttf'] },
+    { family: '悠哉-正常', files: ['字体样式/悠哉字体/悠哉字体/悠哉-正常.ttf'] },
+    { family: '悠哉-中等', files: ['字体样式/悠哉字体/悠哉字体/悠哉-中等.ttf'] },
   ];
 
   const bundledFamilies = new Set(BUNDLED_FONTS.map(f => f.family));
@@ -118,5 +122,12 @@
     }
   }
 
-  App.Fonts = { BUNDLED_FONTS, injectBundledFonts, refreshFontSelect, addFontFile, registerFont, loadFontFromStorage };
+  function isBundledFamily(family) {
+    return !!(family && bundledFamilies.has(family));
+  }
+
+  App.Fonts = {
+    BUNDLED_FONTS, injectBundledFonts, refreshFontSelect, addFontFile,
+    registerFont, loadFontFromStorage, isBundledFamily
+  };
 })(window.App = window.App || {});
