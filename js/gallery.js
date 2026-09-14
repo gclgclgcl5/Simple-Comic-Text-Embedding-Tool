@@ -437,6 +437,8 @@
     addTextBtn.disabled = true;
     exportOneBtn.disabled = true;
     if (propsPanel) propsPanel.hidden = true;
+    if (App.Editor && App.Editor.resetZoom) App.Editor.resetZoom();
+    else if (App.Editor && App.Editor.syncZoomUI) App.Editor.syncZoomUI();
     if (App.DrawToolbar) App.DrawToolbar.updateModeUI();
     if (App.UI) App.UI.syncPropsState();
   }
@@ -488,6 +490,7 @@
     addTextBtn.disabled = true;
     exportOneBtn.disabled = true;
     if (propsPanel) propsPanel.hidden = true;
+    if (App.Editor && App.Editor.resetZoom) App.Editor.resetZoom();
     renderThumbs();
     if (App.DrawToolbar) App.DrawToolbar.updateModeUI();
     if (App.UI) App.UI.syncPropsState();

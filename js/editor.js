@@ -16,8 +16,12 @@
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   const CONFIRM_BTN_GAP = 8;
   const CONFIRM_PAIR_WIDTH = 72;
+  const ZOOM_STEPS = [0.5, 0.67, 1, 1.5, 2, 3];
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 3;
 
   let measureCanvas = null;
+  let viewZoom = 1;
   let rotateSession = {
     active: false,
     textId: null,
@@ -579,15 +583,122 @@
     if (App.Toolbar && App.Toolbar.syncRotateControls) App.Toolbar.syncRotateControls();
   }
 
+  function getZoom() { return viewZoom; }
+
+  function syncZoomUI() {
+    const { zoomPct, zoomOutBtn, zoomInBtn, zoomFitBtn } = App.Dom;
+    const has = !!State.current();
+    if (zoomPct) {
+      if (document.activeElement !== zoomPct) {
+        zoomPct.value = String(Math.round(viewZoom * 100));
+      }
+      zoomPct.disabled = !has;
+    }
+    if (zoomOutBtn) zoomOutBtn.disabled = !has;
+    if (zoomInBtn) zoomInBtn.disabled = !has;
+    if (zoomFitBtn) zoomFitBtn.disabled = !has;
+  }
+
+  function computeFitSize() {
+    const img = State.current();
+    if (!img) return { fitW: 200, fitH: 200 };
+    const pad = 36;
+    const aw = Math.max(canvasArea.clientWidth - pad, 200);
+    const ah = Math.max(canvasArea.clientHeight - pad, 200);
+    let fitW = aw, fitH = fitW * img.h / img.w;
+    if (fitH > ah) {
+      fitH = ah;
+      fitW = fitH * img.w / img.h;
+    }
+    return { fitW, fitH };
+  }
+
+  function clampZoom(z) {
+    if (!isFinite(z) || z <= 0) return 1;
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  }
+
+  function nearestZoomStep(z) {
+    let best = ZOOM_STEPS[0], bestD = Math.abs(z - best);
+    for (let i = 1; i < ZOOM_STEPS.length; i++) {
+      const d = Math.abs(z - ZOOM_STEPS[i]);
+      if (d < bestD) { best = ZOOM_STEPS[i]; bestD = d; }
+    }
+    return best;
+  }
+
   function layoutStage() {
     if (!State.current()) return;
-    const pad = 36;
-    const aw = Math.max(canvasArea.clientWidth - pad, 200), ah = Math.max(canvasArea.clientHeight - pad, 200);
-    let w = aw, h = w * State.current().h / State.current().w;
-    if (h > ah) { h = ah; w = h * State.current().w / State.current().h; }
+    const { fitW, fitH } = computeFitSize();
+    const w = fitW * viewZoom;
+    const h = fitH * viewZoom;
     stage.style.width = w + 'px';
     stage.style.height = h + 'px';
+    syncZoomUI();
     if (App.Draw) App.Draw.onStageResize();
+  }
+
+  /**
+   * @param {number} nextZoom
+   * @param {{ clientX?: number, clientY?: number } | null} anchor 视口坐标；缺省为画布中心
+   */
+  function setZoom(nextZoom, anchor) {
+    if (!State.current() || !canvasArea) return;
+    const z = clampZoom(nextZoom);
+    if (Math.abs(z - viewZoom) < 0.0005) {
+      syncZoomUI();
+      return;
+    }
+
+    const rect = canvasArea.getBoundingClientRect();
+    const ax = (anchor && typeof anchor.clientX === 'number')
+      ? anchor.clientX
+      : (rect.left + rect.width / 2);
+    const ay = (anchor && typeof anchor.clientY === 'number')
+      ? anchor.clientY
+      : (rect.top + rect.height / 2);
+
+    const before = stage.getBoundingClientRect();
+    const bw = before.width || 1;
+    const bh = before.height || 1;
+    const relX = (ax - before.left) / bw;
+    const relY = (ay - before.top) / bh;
+
+    viewZoom = z;
+    layoutStage();
+
+    const after = stage.getBoundingClientRect();
+    canvasArea.scrollLeft += (after.left + relX * after.width) - ax;
+    canvasArea.scrollTop += (after.top + relY * after.height) - ay;
+
+    renderBoxes();
+  }
+
+  function zoomByStep(dir, anchor) {
+    const cur = nearestZoomStep(viewZoom);
+    const idx = ZOOM_STEPS.indexOf(cur);
+    let nextIdx = idx + (dir < 0 ? -1 : 1);
+    if (nextIdx < 0) nextIdx = 0;
+    if (nextIdx >= ZOOM_STEPS.length) nextIdx = ZOOM_STEPS.length - 1;
+    setZoom(ZOOM_STEPS[nextIdx], anchor || null);
+  }
+
+  function zoomAt(factor, clientX, clientY) {
+    setZoom(viewZoom * factor, { clientX, clientY });
+  }
+
+  function resetZoom() {
+    viewZoom = 1;
+    if (State.current()) {
+      layoutStage();
+      if (canvasArea) {
+        canvasArea.scrollLeft = 0;
+        canvasArea.scrollTop = 0;
+      }
+      renderBoxes();
+    } else {
+      syncZoomUI();
+    }
   }
 
   function selectImage(id) {
@@ -598,6 +709,7 @@
     else if (stage) stage.classList.remove('peek-original');
     State.currentId = id;
     State.selectedTextId = null;
+    viewZoom = 1;
     stageImg.src = img.url;
     stage.hidden = false;
     emptyEditor.hidden = true;
@@ -605,6 +717,10 @@
     addTextBtn.disabled = false;
     exportOneBtn.disabled = false;
     layoutStage();
+    if (canvasArea) {
+      canvasArea.scrollLeft = 0;
+      canvasArea.scrollTop = 0;
+    }
     renderBoxes();
     App.Gallery.renderThumbs();
     if (App.Draw) App.Draw.onImageSelected(img);
@@ -989,6 +1105,7 @@
 
   App.Editor = {
     selectImage, layoutStage, stageH, syncPropsUI,
+    getZoom, setZoom, zoomByStep, zoomAt, resetZoom, syncZoomUI,
     applyPreviewWeight, syncBox, renderBoxes, onBoxPointerDown,
     selectBox, clearSelection, addText, removeText, wrapText, wrapTextForDisplay,
     pushHistory, pushHistoryDebounced, undo, redo,
@@ -996,6 +1113,6 @@
     startRotate, exitRotate, confirmRotate, cancelRotateDraft,
     abortRotateIfNeeded, isRotating, getTextRotation, ensureTextRotation,
     normalizeRotation, getRotateDraft, getDisplayRotation, setRotateDraft,
-    BOLD_RATIO, FONT: () => FONT, LH_RATIO, TA_PAD_X, WRAP_SLACK_EM
+    BOLD_RATIO, FONT: () => FONT, LH_RATIO, TA_PAD_X, WRAP_SLACK_EM, ZOOM_STEPS
   };
 })(window.App = window.App || {});

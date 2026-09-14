@@ -7,7 +7,8 @@
   const {
     fileInput, checkAll, clearAllBtn, createProjectBtn, clearCacheBtn, addTextBtn, stage, canvasArea,
     fontUploadBtn, fontInput, exportOneBtn, exportBtn, tbDelBtn, tbBold,
-    teamModeToggle, projectImportInput
+    teamModeToggle, projectImportInput,
+    zoomOutBtn, zoomInBtn, zoomFitBtn, zoomPct
   } = App.Dom;
 
   let peekingOriginal = false;
@@ -167,6 +168,54 @@
       if (!State.isTextMode()) return;
       App.Editor.addText(0.5, 0.5);
     });
+
+    if (zoomOutBtn) {
+      zoomOutBtn.addEventListener('click', () => {
+        if (!State.current()) return;
+        App.Editor.zoomByStep(-1);
+      });
+    }
+    if (zoomInBtn) {
+      zoomInBtn.addEventListener('click', () => {
+        if (!State.current()) return;
+        App.Editor.zoomByStep(1);
+      });
+    }
+    if (zoomFitBtn) {
+      zoomFitBtn.addEventListener('click', () => {
+        if (!State.current()) return;
+        App.Editor.resetZoom();
+      });
+    }
+    if (zoomPct) {
+      const commitZoomPct = () => {
+        if (!State.current()) return;
+        const n = parseFloat(String(zoomPct.value).replace(/%/g, '').trim());
+        if (!isFinite(n)) {
+          App.Editor.syncZoomUI();
+          return;
+        }
+        App.Editor.setZoom(n / 100);
+      };
+      zoomPct.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitZoomPct();
+          zoomPct.blur();
+        }
+      });
+      zoomPct.addEventListener('change', commitZoomPct);
+      zoomPct.addEventListener('blur', commitZoomPct);
+    }
+
+    if (canvasArea) {
+      canvasArea.addEventListener('wheel', e => {
+        if (!e.ctrlKey || !State.current()) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : (1 / 1.1);
+        App.Editor.zoomAt(factor, e.clientX, e.clientY);
+      }, { passive: false });
+    }
 
     stage.addEventListener('dblclick', e => {
       if (!State.isTextMode()) return;

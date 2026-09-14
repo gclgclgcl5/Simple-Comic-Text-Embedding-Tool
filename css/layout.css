@@ -323,6 +323,41 @@ body.gallery-collapsed.props-collapsed .app-main {
   gap: var(--space-2);
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
+}
+
+.zoom-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.zoom-ctrl .btn {
+  min-width: 2rem;
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.zoom-ctrl #zoomPct {
+  width: 3.25rem;
+  text-align: center;
+  padding: 0.25rem 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.zoom-ctrl #zoomPct:disabled {
+  opacity: 0.55;
+}
+
+.zoom-ctrl .zoom-pct-suffix {
+  color: var(--muted);
+  font-size: 0.85em;
+  margin-right: 2px;
 }
 
 #canvasArea {
@@ -331,8 +366,7 @@ body.gallery-collapsed.props-collapsed .app-main {
   min-height: 0;
   overflow: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  /* 不用 align/justify:center，改用子项 margin:auto：任意缩放都居中，且放大后仍可滚到边缘 */
   padding: var(--space-6);
   background:
     radial-gradient(circle at 1px 1px, var(--canvas-dot) 1px, transparent 0) 0 0 / 20px 20px,
@@ -346,6 +380,7 @@ body.gallery-collapsed.props-collapsed .app-main {
   overflow: visible;
   user-select: none;
   flex: none;
+  margin: auto;
 }
 
 #stage img {
@@ -367,6 +402,7 @@ body.gallery-collapsed.props-collapsed .app-main {
   text-align: center;
   color: var(--muted);
   max-width: 420px;
+  margin: auto;
 }
 
 .dropzone {
