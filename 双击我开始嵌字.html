@@ -92,6 +92,9 @@
           <svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>
           添加文字
         </button>
+        <button type="button" class="btn" id="panBtn" disabled title="手型：拖动画布平移" aria-label="手型平移" aria-pressed="false">
+          <svg class="icon" aria-hidden="true"><use href="#icon-hand"/></svg>
+        </button>
         <div class="zoom-ctrl" title="相对适应窗口；画布上 Ctrl+滚轮缩放">
           <button type="button" class="btn" id="zoomOutBtn" disabled aria-label="缩小">−</button>
           <input type="text" id="zoomPct" inputmode="numeric" value="100" disabled aria-label="缩放百分比" title="相对适应窗口的百分比，回车确认">
@@ -265,10 +268,10 @@
               <button type="button" class="draw-tool" data-tool="ellipse" title="椭圆">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-ellipse"/></svg>
               </button>
-              <button type="button" class="draw-tool" data-tool="smartfill" title="矩形智能遮盖：粗框后按文字并集矩形纯色遮盖">
+              <button type="button" class="draw-tool" data-tool="smartfill" title="矩形智能遮盖：框住文字即可（少带话框更好），盖成直角色块">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-smartfill"/></svg>
               </button>
-              <button type="button" class="draw-tool" data-tool="smartfill-bubble" title="异形泡智能遮盖：粗框后沿气泡描边填充内部（适合圆/歪泡）">
+              <button type="button" class="draw-tool" data-tool="smartfill-bubble" title="异形泡智能遮盖：框住整圈话框描边，沿泡内填充（适合圆/歪泡）">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#icon-smartfill-bubble"/></svg>
               </button>
               <button type="button" class="draw-tool" data-tool="eyedropper" title="取色器">
@@ -377,11 +380,19 @@
       <ul>
         <li><strong>嵌字模式</strong>：选中文字框后在右侧修改样式；无选中时可设置默认样式</li>
         <li><strong>旋转模式</strong>：选中横排文字后可在面板输入/步进角度，或点「开始旋转」拖动绕中心旋转（±180°）；松手后点 ✓ 确认并退出，点 × 还原进入前角度；「退出旋转模式」或 Esc 取消未确认角度</li>
-        <li><strong>画图模式</strong>：用画笔或形状遮盖原图文字，再切换回嵌字模式添加文字</li>
-        <li><strong>智能遮盖</strong>（画图工具）：<em>矩形</em>按文字并集矩形填充；<em>异形泡</em>沿气泡描边填充内部（适合圆/歪泡）。粗框即可，不准可 Ctrl+Z 后手涂</li>
-        <li><strong>汉化组模式</strong>：在图库底部开启后，「导出这张 / 导出所选」改为导出工程包 ZIP；关闭则仍导出成品 PNG。导入工程在图库顶部，与模式开关无关</li>
+        <li><strong>画图模式</strong>：用画笔、形状或智能遮盖盖住原图文字，再切回嵌字模式添加中文；最近约 8 步画图撤销会写入本地，刷新后仍可撤回</li>
+        <li><strong>汉化组模式</strong>：在图库底部开启后，「导出这张 / 导出所选」改为导出工程包 ZIP；关闭则仍导出成品 PNG。工程包含画图撤销历史（约 8 步）。导入工程在图库顶部，与模式开关无关</li>
         <li><strong>样式预设</strong>（嵌字面板）：选中文字框后点空白槽保存（含旋转角度）；点有内容槽套用到选中文字框；× 删除</li>
         <li><strong>图形预设</strong>（画图面板）：选中图形后点空白槽保存；点有内容槽在图片中心插入；× 删除</li>
+      </ul>
+      <h3>画布缩放与平移</h3>
+      <p>工作区顶栏可缩放画布（<kbd>Ctrl+滚轮</kbd> 亦可）。放大后点顶栏<strong>手型</strong>按钮，拖动画布查看细节；再点一次或按 <kbd>Esc</kbd> 退出。</p>
+      <h3>智能遮盖怎么用</h3>
+      <p>进入<strong>画图模式</strong>，选矩形或异形泡工具，在图上拖出选区，松手后自动用底色盖住原字。不准就 <kbd>Ctrl+Z</kbd> 撤销，再改用手涂或形状补。</p>
+      <ul>
+        <li><strong>矩形</strong>（方框气泡、横排字块）：框住要盖的文字即可，尽量少带话框黑线；会盖成直角色块。</li>
+        <li><strong>异形泡</strong>（圆泡、歪泡）：框时把<strong>整圈话框描边</strong>都圈进去，让黑线在选区内闭合；只圈字心容易失败。会沿泡内形状填充，一般不啃泡外线稿。</li>
+        <li>更适合<strong>浅底深字</strong>的漫画对白；复杂底纹、彩色字、深底浅字效果较差，可改用手涂。</li>
       </ul>
       <h3>快捷键</h3>
       <table>
@@ -389,7 +400,7 @@
         <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>删除选中的文字框（嵌字模式）或图形（画图模式，需先选中矩形/椭圆）</td></tr>
         <tr><td><kbd>Space</kbd>（按住）</td><td>查看原图（松开恢复；在输入框内不生效）</td></tr>
         <tr><td><kbd>Ctrl+滚轮</kbd></td><td>缩放画布（相对适应窗口；仅在画布区域生效）</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>取消取色 / 退出旋转模式（丢弃未确认角度）/ 取消选中文字框（嵌字模式）</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>取消取色 / 退出旋转模式（丢弃未确认角度）/ 退出手型平移 / 取消选中文字框（嵌字模式）</td></tr>
         <tr><td><kbd>Ctrl+B</kbd></td><td>加粗（嵌字模式，需选中文字框）</td></tr>
         <tr><td><kbd>Ctrl+Z</kbd></td><td>撤销（嵌字：文字操作；画图：画笔/形状）</td></tr>
         <tr><td><kbd>Ctrl+Y</kbd> / <kbd>Ctrl+Shift+Z</kbd></td><td>重做（嵌字：文字操作；画图：画笔/形状）</td></tr>
@@ -397,9 +408,37 @@
       </table>
       <h3>字体</h3>
       <p style="color:var(--muted);margin-top:8px">内置字体自动加载自「字体样式」目录；上传的自定义字体会写入 IndexedDB，刷新后自动恢复。点击顶栏「清除缓存」可一并删除。</p>
+      <h3>本地存储</h3>
+      <p style="color:var(--muted);margin-top:8px">图片与编辑保存在浏览器本地。占用偏高或写满时会提示先导出备份（成品或工程包），确认后再清除缓存腾出空间。画图撤销历史仅保留最近约 8 步以便救急，空间不足时会优先保住当前画稿。</p>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn primary" id="helpModalOk">知道了</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="storageQuotaModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title" id="storageQuotaTitle">本地存储占用偏高</span>
+      <button type="button" class="icon-btn" id="storageQuotaClose" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="storageQuotaUsage" style="margin:0 0 12px"></p>
+      <p style="color:var(--muted);margin:0 0 12px">建议先导出备份，再清除本地缓存以腾出空间。清除后需重新导入工程包或上传图片才能继续编辑。</p>
+      <ul>
+        <li><strong>导出工程包</strong>：以后还要继续嵌字/修图时用（可再导入）</li>
+        <li><strong>导出成品</strong>：只要交定稿 PNG/ZIP 时用</li>
+      </ul>
+      <p style="color:var(--muted);margin:12px 0 0;font-size:13px">导出前请在左侧图库勾选要备份的图片或工程。</p>
+    </div>
+    <div class="modal-footer modal-footer-stack">
+      <button type="button" class="btn primary" id="storageQuotaExportProject">导出工程包</button>
+      <button type="button" class="btn" id="storageQuotaExportPng">导出成品</button>
+      <button type="button" class="btn" id="storageQuotaClear">清除本地缓存</button>
+      <button type="button" class="btn" id="storageQuotaLater">稍后处理</button>
     </div>
   </div>
 </dialog>
@@ -425,6 +464,7 @@
   <symbol id="icon-ellipse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="10" ry="7"/></symbol>
   <symbol id="icon-smartfill" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="0" stroke-dasharray="3 2"/><rect x="7" y="8" width="10" height="8" fill="currentColor" stroke="none" opacity="0.35"/><path d="M9 12h6M9 15h4"/></symbol>
   <symbol id="icon-smartfill-bubble" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="11" rx="8" ry="7" stroke-dasharray="3 2"/><ellipse cx="12" cy="11" rx="4.5" ry="3.5" fill="currentColor" stroke="none" opacity="0.35"/><path d="M10 18l2 3 2-3"/></symbol>
+  <symbol id="icon-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-5.9-2.6L3 15.5a2 2 0 0 1 2.8-2.8L8 15"/></symbol>
   <symbol id="icon-eyedropper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22l1-1h3l9-9"/><path d="M15 6l3 3"/><path d="M8 13l-5 5a2 2 0 0 0 2.83 2.83L11 16"/></symbol>
   <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></symbol>
   <symbol id="icon-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>

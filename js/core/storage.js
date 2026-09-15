@@ -6,11 +6,15 @@
   const DB_VERSION = 1;
   const SESSION_KEY = 'main';
   const DEBOUNCE_MS = 400;
+  const WARN_RATIO = 0.8;
+  const QUOTA_WARN_SESSION_KEY = 'dsh_quota_warn_shown_v1';
+  const FORCE_NOTIFY_COOLDOWN_MS = 2500;
 
   let db = null;
   let available = false;
   let restoring = false;
   const editTimers = new Map();
+  let lastForceNotifyAt = 0;
 
   function reqToPromise(req) {
     return new Promise((resolve, reject) => {
@@ -77,6 +81,7 @@
       await txDone(tx);
     } catch (e) {
       handleWriteError(e);
+      if (e && e.name === 'QuotaExceededError') throw e;
     }
   }
 
@@ -107,7 +112,61 @@
 
   function handleWriteError(e) {
     console.error(e);
-    if (e && e.name === 'QuotaExceededError') toast('本地存储空间不足，请清除缓存或减少图片数量', 4000);
+    if (e && e.name === 'QuotaExceededError') {
+      checkQuotaAndNotify({ force: true }).catch(() => {});
+    }
+  }
+
+  async function estimateUsage() {
+    try {
+      if (!navigator.storage || typeof navigator.storage.estimate !== 'function') return null;
+      const est = await navigator.storage.estimate();
+      const usage = typeof est.usage === 'number' ? est.usage : 0;
+      const quota = typeof est.quota === 'number' ? est.quota : 0;
+      if (!quota || quota <= 0) return { usage, quota: 0, ratio: null };
+      return { usage, quota, ratio: usage / quota };
+    } catch (e) {
+      console.warn('storage estimate failed', e);
+      return null;
+    }
+  }
+
+  /**
+   * @param {{ force?: boolean }} [opts]
+   * @returns {Promise<boolean>} 是否已打开占用引导弹窗
+   */
+  async function checkQuotaAndNotify(opts) {
+    const force = !!(opts && opts.force);
+    if (force) {
+      const now = Date.now();
+      if (now - lastForceNotifyAt < FORCE_NOTIFY_COOLDOWN_MS) return false;
+      lastForceNotifyAt = now;
+    }
+
+    const est = await estimateUsage();
+    const overWarn = est && typeof est.ratio === 'number' && est.ratio >= WARN_RATIO;
+
+    if (!force && !overWarn) return false;
+
+    if (!force && overWarn) {
+      try {
+        if (sessionStorage.getItem(QUOTA_WARN_SESSION_KEY) === '1') return false;
+        sessionStorage.setItem(QUOTA_WARN_SESSION_KEY, '1');
+      } catch (e) {}
+    }
+
+    if (App.UI && typeof App.UI.openStorageQuotaModal === 'function') {
+      App.UI.openStorageQuotaModal({
+        force,
+        usage: est ? est.usage : null,
+        quota: est ? est.quota : null,
+        ratio: est ? est.ratio : null
+      });
+      return true;
+    }
+
+    if (force) toast('本地存储空间不足，请导出备份后清除缓存', 4000);
+    return false;
   }
 
   function canvasToBlob(canvas) {
@@ -234,7 +293,33 @@
     if (img.draw && img.draw.rasterCanvas && canvasHasInk(img.draw.rasterCanvas)) {
       rasterBlob = await canvasToBlob(img.draw.rasterCanvas);
     }
-    await saveEdit(imageId, { ...snap, rasterBlob });
+    const base = { ...snap, rasterBlob };
+
+    let drawHistory = null;
+    if (App.Draw && typeof App.Draw.serializeUndoForDisk === 'function') {
+      try {
+        const hist = await App.Draw.serializeUndoForDisk(img);
+        if (hist && Array.isArray(hist.undo) && hist.undo.length) drawHistory = hist;
+      } catch (e) {
+        console.warn('serialize draw history failed', e);
+      }
+    }
+
+    const payloadWithHist = { ...base, drawHistory: drawHistory || null };
+    try {
+      await saveEdit(imageId, payloadWithHist);
+      checkQuotaAndNotify().catch(() => {});
+    } catch (e) {
+      if (e && e.name === 'QuotaExceededError') {
+        try {
+          await saveEdit(imageId, { ...base, drawHistory: null });
+        } catch (e2) {
+          console.error('save edit without history failed', e2);
+        }
+        return;
+      }
+      throw e;
+    }
   }
 
   function scheduleSaveEdit(imageId) {
@@ -242,7 +327,10 @@
     if (editTimers.has(imageId)) clearTimeout(editTimers.get(imageId));
     editTimers.set(imageId, setTimeout(() => {
       editTimers.delete(imageId);
-      flushSaveEdit(imageId).catch(e => handleWriteError(e));
+      flushSaveEdit(imageId).catch(e => {
+        if (e && e.name === 'QuotaExceededError') return;
+        handleWriteError(e);
+      });
     }, DEBOUNCE_MS));
   }
 
@@ -340,6 +428,9 @@
               const canvas = App.Draw.ensureRaster(img);
               await restoreRaster(canvas, edit.rasterBlob);
             }
+            if (edit.drawHistory && Array.isArray(edit.drawHistory.undo) && App.Draw && App.Draw.hydrateUndoFromDisk) {
+              await App.Draw.hydrateUndoFromDisk(img, edit.drawHistory.undo);
+            }
           }
           images.push(img);
         } catch (e) {
@@ -413,6 +504,9 @@
     canvasToBlob,
     canvasHasInk,
     restoreRaster,
-    initFlushHooks
+    initFlushHooks,
+    estimateUsage,
+    checkQuotaAndNotify,
+    WARN_RATIO
   };
 })(window.App = window.App || {});

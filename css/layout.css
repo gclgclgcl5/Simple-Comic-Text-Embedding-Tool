@@ -332,6 +332,34 @@ body.gallery-collapsed.props-collapsed .app-main {
   gap: 2px;
 }
 
+.workspace-tools .btn.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#panBtn {
+  min-width: 2rem;
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+#canvasArea.is-panning,
+#stage.mode-pan {
+  cursor: grab;
+}
+
+#canvasArea.is-panning.is-pan-dragging,
+#stage.mode-pan.is-pan-dragging {
+  cursor: grabbing;
+}
+
+#stage.mode-pan .text-box,
+#stage.mode-pan #drawRaster,
+#stage.mode-pan #drawShapeLayer {
+  pointer-events: none;
+}
+
 .zoom-ctrl .btn {
   min-width: 2rem;
   padding-left: var(--space-2);

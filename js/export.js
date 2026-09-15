@@ -159,16 +159,22 @@
     return jobs;
   }
 
-  async function exportSelected() {
+  /**
+   * @param {{ mode?: 'auto' | 'png' | 'project' }} [opts]
+   *   auto：跟随汉化组开关；png / project：强制成品或工程包（不改开关状态）
+   */
+  async function exportSelected(opts) {
     const jobs = collectExportJobs();
-    if (!jobs.length) return;
+    if (!jobs.length) return false;
+    const mode = (opts && opts.mode) || 'auto';
+    const asProject = mode === 'project' || (mode === 'auto' && State.isTeamMode());
     exportBtn.disabled = true;
     exportOneBtn.disabled = true;
     try {
-      if (State.isTeamMode()) {
+      if (asProject) {
         const images = jobs.map(j => j.img);
         await App.ProjectIO.exportZip(images, { progressEl: exportBtn });
-        return;
+        return true;
       }
       const used = new Set(), parts = [];
       for (let i = 0; i < jobs.length; i++) {
@@ -180,12 +186,15 @@
       const zip = await makeZip(parts);
       download(zip, '嵌字图片_' + stamp() + '.zip');
       toast('✅ 已导出 ' + parts.length + ' 张图片');
+      return true;
     } catch (err) {
       console.error(err);
       toast('❌ 导出失败：' + err.message, 3200);
+      return false;
     } finally {
       App.Gallery.syncSelectUI();
       exportOneBtn.disabled = !State.current();
+      if (App.ProjectIO) App.ProjectIO.syncExportLabels();
     }
   }
 

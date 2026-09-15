@@ -94,6 +94,7 @@
   }
 
   async function onEyedropperPointerDown(e) {
+    if (App.Editor && App.Editor.isPanMode && App.Editor.isPanMode()) return;
     if (!textEyedropperTarget || !State.isTextMode()) return;
     if (e.button !== 0) return;
     if (e.target.closest('.props-panel') || e.target.closest('#textProps')) return;

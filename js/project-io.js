@@ -3,7 +3,7 @@
   "use strict";
 
   const FORMAT = 'image-text-tool-project';
-  const VERSION = 1;
+  const VERSION = 2;
 
   const { stamp, toast, isNameTaken } = App.Utils;
   const State = App.State;
@@ -122,9 +122,33 @@
       parts.push({ name: imgPath, blob: img.sourceBlob });
 
       const snap = App.Storage.snapshotEdit(img);
+      const editPayload = { ...snap };
+
+      if (App.Draw && typeof App.Draw.serializeUndoForDisk === 'function') {
+        try {
+          const hist = await App.Draw.serializeUndoForDisk(img);
+          if (hist && Array.isArray(hist.undo) && hist.undo.length) {
+            const undoMeta = [];
+            for (let hi = 0; hi < hist.undo.length; hi++) {
+              const step = hist.undo[hi] || {};
+              const shapes = JSON.parse(JSON.stringify(step.shapes || []));
+              let rasterRef = null;
+              if (step.rasterBlob) {
+                rasterRef = 'edits/' + id + '-hist-' + hi + '.png';
+                parts.push({ name: rasterRef, blob: step.rasterBlob });
+              }
+              undoMeta.push({ shapes, raster: rasterRef });
+            }
+            editPayload.drawHistory = { undo: undoMeta };
+          }
+        } catch (e) {
+          console.warn('export draw history', img.name, e);
+        }
+      }
+
       parts.push({
         name: editPath,
-        blob: new Blob([JSON.stringify(snap)], { type: 'application/json' })
+        blob: new Blob([JSON.stringify(editPayload)], { type: 'application/json' })
       });
 
       const rasterBlob = await buildRasterBlob(img);
@@ -279,22 +303,24 @@
         projectId
       };
 
+      let editJson = null;
       if (meta.edit) {
         const editEn = findEntry(entries, meta.edit);
         if (editEn) {
           try {
-            const edit = JSON.parse(await entryToText(editEn));
-            img.texts = JSON.parse(JSON.stringify(edit.texts || []));
-            if (edit.draw) {
-              img.draw.tool = edit.draw.tool || 'brush';
-              img.draw.color = edit.draw.color || '#ffffff';
-              img.draw.brushSize = edit.draw.brushSize ?? 12;
-              img.draw.eraserSize = edit.draw.eraserSize ?? 20;
+            editJson = JSON.parse(await entryToText(editEn));
+            img.texts = JSON.parse(JSON.stringify(editJson.texts || []));
+            if (editJson.draw) {
+              img.draw.tool = editJson.draw.tool || 'brush';
+              img.draw.color = editJson.draw.color || '#ffffff';
+              img.draw.brushSize = editJson.draw.brushSize ?? 12;
+              img.draw.eraserSize = editJson.draw.eraserSize ?? 20;
               img.draw.selectedShapeId = null;
             }
-            img.draw.shapes = JSON.parse(JSON.stringify(edit.shapes || []));
+            img.draw.shapes = JSON.parse(JSON.stringify(editJson.shapes || []));
           } catch (e) {
             console.warn('edit parse', meta.edit, e);
+            editJson = null;
           }
         }
       }
@@ -312,6 +338,33 @@
         }
       }
 
+      if (editJson && editJson.drawHistory && Array.isArray(editJson.drawHistory.undo) && App.Draw && App.Draw.hydrateUndoFromDisk) {
+        const histEntries = [];
+        for (let hi = 0; hi < editJson.drawHistory.undo.length; hi++) {
+          const step = editJson.drawHistory.undo[hi] || {};
+          let rasterBlobStep = null;
+          if (step.raster) {
+            const hEn = findEntry(entries, step.raster);
+            if (hEn) {
+              try {
+                rasterBlobStep = await entryToBlob(hEn, 'image/png');
+              } catch (e) {
+                console.warn('hist raster', step.raster, e);
+              }
+            }
+          }
+          histEntries.push({
+            shapes: JSON.parse(JSON.stringify(step.shapes || [])),
+            rasterBlob: rasterBlobStep
+          });
+        }
+        try {
+          await App.Draw.hydrateUndoFromDisk(img, histEntries);
+        } catch (e) {
+          console.warn('hydrate draw history', meta.edit, e);
+        }
+      }
+
       State.images.push(img);
       if (App.Storage.isAvailable()) {
         await App.Storage.saveImageMeta(img);
@@ -320,7 +373,16 @@
         if (img.draw.rasterCanvas && App.Storage.canvasHasInk(img.draw.rasterCanvas)) {
           rasterBlob = await App.Storage.canvasToBlob(img.draw.rasterCanvas);
         }
-        await App.Storage.saveEdit(img.id, { ...snap, rasterBlob });
+        let drawHistory = null;
+        if (App.Draw && typeof App.Draw.serializeUndoForDisk === 'function') {
+          try {
+            const hist = await App.Draw.serializeUndoForDisk(img);
+            if (hist && Array.isArray(hist.undo) && hist.undo.length) drawHistory = hist;
+          } catch (e) {
+            console.warn('serialize draw history on import', e);
+          }
+        }
+        await App.Storage.saveEdit(img.id, { ...snap, rasterBlob, drawHistory: drawHistory || null });
       }
       imported++;
       if (!selectId) selectId = img.id;

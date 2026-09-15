@@ -8,7 +8,7 @@
     fileInput, checkAll, clearAllBtn, createProjectBtn, clearCacheBtn, addTextBtn, stage, canvasArea,
     fontUploadBtn, fontInput, exportOneBtn, exportBtn, tbDelBtn, tbBold,
     teamModeToggle, projectImportInput,
-    zoomOutBtn, zoomInBtn, zoomFitBtn, zoomPct
+    zoomOutBtn, zoomInBtn, zoomFitBtn, zoomPct, panBtn
   } = App.Dom;
 
   let peekingOriginal = false;
@@ -75,6 +75,12 @@
     if (App.ProjectIO) App.ProjectIO.syncExportLabels();
 
     if (restored) toast('已恢复上次工作进度');
+
+    if (storageOk) {
+      setTimeout(() => {
+        App.Storage.checkQuotaAndNotify().catch(() => {});
+      }, 700);
+    }
 
     fileInput.addEventListener('change', () => {
       App.Gallery.addFiles([...fileInput.files]);
@@ -187,6 +193,12 @@
         App.Editor.resetZoom();
       });
     }
+    if (panBtn) {
+      panBtn.addEventListener('click', () => {
+        if (!State.current()) return;
+        App.Editor.togglePanMode();
+      });
+    }
     if (zoomPct) {
       const commitZoomPct = () => {
         if (!State.current()) return;
@@ -219,6 +231,7 @@
 
     stage.addEventListener('dblclick', e => {
       if (!State.isTextMode()) return;
+      if (App.Editor.isPanMode && App.Editor.isPanMode()) return;
       if (e.target.closest('.text-box') || e.target.closest('#textProps')) return;
       const r = stage.getBoundingClientRect();
       const x = Math.min(0.95, Math.max(0.05, (e.clientX - r.left) / r.width));
@@ -227,6 +240,7 @@
     });
 
     canvasArea.addEventListener('mousedown', e => {
+      if (App.Editor.isPanMode && App.Editor.isPanMode()) return;
       if (!State.isTextMode() || !State.selectedTextId) return;
       if (e.target.closest('.text-box') || e.target.closest('#textProps') || e.target.closest('.props-panel') || e.target.closest('.text-rotate-confirm')) return;
       App.Editor.clearSelection();
@@ -320,6 +334,10 @@
       } else if (e.key === 'Escape') {
         if (App.Toolbar.cancelEyedropper()) return;
         if (App.Editor.abortRotateIfNeeded()) return;
+        if (App.Editor.isPanMode && App.Editor.isPanMode()) {
+          App.Editor.setPanMode(false);
+          return;
+        }
         if (State.selectedTextId) App.Editor.clearSelection();
       }
     });

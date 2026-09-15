@@ -122,6 +122,91 @@
     }
   }
 
+  function formatBytes(n) {
+    if (typeof n !== 'number' || !isFinite(n) || n < 0) return '—';
+    const mb = n / (1024 * 1024);
+    if (mb < 0.1) return Math.round(n / 1024) + ' KB';
+    if (mb < 10) return mb.toFixed(1) + ' MB';
+    return Math.round(mb) + ' MB';
+  }
+
+  function openStorageQuotaModal(opts) {
+    const {
+      storageQuotaModal, storageQuotaTitle, storageQuotaUsage
+    } = App.Dom;
+    if (!storageQuotaModal || typeof storageQuotaModal.showModal !== 'function') return;
+
+    const force = !!(opts && opts.force);
+    if (storageQuotaTitle) {
+      storageQuotaTitle.textContent = force ? '本地存储空间不足' : '本地存储占用偏高';
+    }
+    if (storageQuotaUsage) {
+      const usage = opts && opts.usage;
+      const quota = opts && opts.quota;
+      const ratio = opts && opts.ratio;
+      if (typeof usage === 'number' && typeof quota === 'number' && quota > 0 && typeof ratio === 'number') {
+        storageQuotaUsage.textContent = '当前约已用 ' + formatBytes(usage) + ' / 配额约 ' +
+          formatBytes(quota) + '（' + Math.round(ratio * 100) + '%）。';
+      } else if (force) {
+        storageQuotaUsage.textContent = '浏览器拒绝继续写入本地数据（配额不足）。请先导出备份，再清除缓存。';
+      } else {
+        storageQuotaUsage.textContent = '本地存储占用已接近上限，建议先导出备份再清除缓存。';
+      }
+    }
+
+    if (!storageQuotaModal.open) storageQuotaModal.showModal();
+  }
+
+  function closeStorageQuotaModal() {
+    const modal = App.Dom.storageQuotaModal;
+    if (modal && typeof modal.close === 'function' && modal.open) modal.close();
+  }
+
+  async function clearLocalCacheFromQuotaModal() {
+    const { toast } = App.Utils;
+    if (!confirm('将清除所有本地保存的图片、工程、编辑与上传字体。\n当前内存中的内容也会一并清空，是否继续？\n\n请确认已导出需要保留的备份。')) return;
+    if (App.Storage && App.Storage.isAvailable()) await App.Storage.clearAll();
+    if (App.Gallery) App.Gallery.clearAll(true, true);
+    closeStorageQuotaModal();
+    toast('已清除本地缓存');
+  }
+
+  async function exportFromQuotaModal(mode) {
+    const { toast } = App.Utils;
+    if (!App.Export || !App.Export.collectExportJobs) return;
+    const jobs = App.Export.collectExportJobs();
+    if (!jobs.length) {
+      toast('请先在图库勾选要备份的图片或工程', 3200);
+      return;
+    }
+    await App.Export.exportSelected({ mode });
+  }
+
+  function initStorageQuotaModal() {
+    const {
+      storageQuotaModal, storageQuotaClose, storageQuotaExportProject,
+      storageQuotaExportPng, storageQuotaClear, storageQuotaLater
+    } = App.Dom;
+    if (!storageQuotaModal) return;
+
+    if (storageQuotaClose) storageQuotaClose.addEventListener('click', closeStorageQuotaModal);
+    if (storageQuotaLater) storageQuotaLater.addEventListener('click', closeStorageQuotaModal);
+    if (storageQuotaExportProject) {
+      storageQuotaExportProject.addEventListener('click', () => exportFromQuotaModal('project'));
+    }
+    if (storageQuotaExportPng) {
+      storageQuotaExportPng.addEventListener('click', () => exportFromQuotaModal('png'));
+    }
+    if (storageQuotaClear) {
+      storageQuotaClear.addEventListener('click', () => {
+        clearLocalCacheFromQuotaModal().catch(e => console.error(e));
+      });
+    }
+    storageQuotaModal.addEventListener('click', e => {
+      if (e.target === storageQuotaModal) closeStorageQuotaModal();
+    });
+  }
+
   function openHelpModal() {
     const modal = App.Dom.helpModal;
     if (modal && typeof modal.showModal === 'function') modal.showModal();
@@ -199,6 +284,7 @@
     initTheme();
     initSidebarCollapse();
     initHelpModal();
+    initStorageQuotaModal();
     initOwlEasterEgg();
     initDragHighlight();
 
@@ -226,6 +312,8 @@
     getTheme,
     syncPropsState,
     openHelpModal,
-    closeHelpModal
+    closeHelpModal,
+    openStorageQuotaModal,
+    closeStorageQuotaModal
   };
 })(window.App = window.App || {});

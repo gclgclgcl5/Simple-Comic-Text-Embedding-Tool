@@ -7,6 +7,8 @@
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   const MIN_SHAPE = 0.008;
   const HISTORY_MAX = 50;
+  /** 落盘 undo 步数（小于内存 HISTORY_MAX） */
+  const DISK_UNDO_MAX = 8;
 
   function persistDraw() {
     const img = State.current();
@@ -81,6 +83,98 @@
     d.history.redo = [];
     if (d.history.undo.length > HISTORY_MAX) d.history.undo.shift();
     App.DrawToolbar.updateHistoryButtons();
+  }
+
+  async function imageDataToBlob(imageData) {
+    if (!imageData || !imageData.width || !imageData.height) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = imageData.width;
+    canvas.height = imageData.height;
+    canvas.getContext('2d').putImageData(imageData, 0, 0);
+    if (App.Storage && App.Storage.canvasHasInk && !App.Storage.canvasHasInk(canvas)) return null;
+    if (!App.Storage || !App.Storage.canvasToBlob) return null;
+    return App.Storage.canvasToBlob(canvas);
+  }
+
+  async function blobToImageData(blob, w, h) {
+    if (!blob || !w || !h) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    if (App.Storage && App.Storage.restoreRaster) {
+      await App.Storage.restoreRaster(canvas, blob);
+    } else {
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          URL.revokeObjectURL(img.src);
+          resolve();
+        };
+        img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('blobToImageData failed')); };
+        img.src = URL.createObjectURL(blob);
+      });
+    }
+    return canvas.getContext('2d').getImageData(0, 0, w, h);
+  }
+
+  /**
+   * 将内存 undo 尾部序列化为可写入 IndexedDB 的结构（不含 redo）。
+   * @returns {Promise<{ undo: Array<{ shapes: any[], rasterBlob: Blob|null }> }>}
+   */
+  async function serializeUndoForDisk(img) {
+    const d = ensureDraw(img);
+    const undo = (d.history && d.history.undo) ? d.history.undo : [];
+    const slice = undo.slice(Math.max(0, undo.length - DISK_UNDO_MAX));
+    const out = [];
+    for (let i = 0; i < slice.length; i++) {
+      const snap = slice[i] || {};
+      const shapes = JSON.parse(JSON.stringify(snap.shapes || []));
+      let rasterBlob = null;
+      if (snap.raster) {
+        try {
+          rasterBlob = await imageDataToBlob(snap.raster);
+        } catch (e) {
+          console.warn('serialize draw undo raster', e);
+          rasterBlob = null;
+        }
+      }
+      out.push({ shapes, rasterBlob });
+      await new Promise(r => setTimeout(r, 0));
+    }
+    return { undo: out };
+  }
+
+  /**
+   * 从磁盘条目恢复内存 undo；redo 清空。
+   * @param {any} img
+   * @param {Array<{ shapes?: any[], rasterBlob?: Blob|null }>|null} entries
+   */
+  async function hydrateUndoFromDisk(img, entries) {
+    const d = ensureDraw(img);
+    d.history.redo = [];
+    d.history.undo = [];
+    if (!Array.isArray(entries) || !entries.length) {
+      if (App.DrawToolbar && App.DrawToolbar.updateHistoryButtons) App.DrawToolbar.updateHistoryButtons();
+      return;
+    }
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i] || {};
+      let raster = null;
+      if (entry.rasterBlob) {
+        try {
+          raster = await blobToImageData(entry.rasterBlob, img.w, img.h);
+        } catch (e) {
+          console.warn('hydrate draw undo raster', e);
+          raster = null;
+        }
+      }
+      d.history.undo.push({
+        raster,
+        shapes: JSON.parse(JSON.stringify(entry.shapes || []))
+      });
+    }
+    if (App.DrawToolbar && App.DrawToolbar.updateHistoryButtons) App.DrawToolbar.updateHistoryButtons();
   }
 
   function undo(img) {
@@ -330,6 +424,10 @@
   }
 
   function updateCursor() {
+    if (App.Editor && App.Editor.isPanMode && App.Editor.isPanMode()) {
+      stage.style.cursor = '';
+      return;
+    }
     if (!State.isDrawMode()) { stage.style.cursor = ''; return; }
     const img = State.current();
     if (!img) return;
@@ -460,6 +558,7 @@
   }
 
   function onPointerDown(e) {
+    if (App.Editor && App.Editor.isPanMode && App.Editor.isPanMode()) return;
     if (!State.isDrawMode() || e.button !== 0) return;
     const img = State.current();
     if (!img || e.target.closest('#drawProps')) return;
@@ -710,6 +809,7 @@
     initDrawLayers, ensureDraw, ensureRaster, syncDrawPreview, deselectShape, selectShape,
     getSelectedShape, insertShapeFromPreset, removeSelectedShape,
     onImageSelected, onStageResize, onModeChange, bindPointerEvents,
-    undo, redo, setTool, applyDrawColor, saveSnapshot, renderToExport, updatePointerEvents
+    undo, redo, setTool, applyDrawColor, saveSnapshot, renderToExport, updatePointerEvents, updateCursor,
+    serializeUndoForDisk, hydrateUndoFromDisk, DISK_UNDO_MAX
   };
 })(window.App = window.App || {});

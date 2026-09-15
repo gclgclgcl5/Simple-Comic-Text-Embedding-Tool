@@ -18,6 +18,7 @@
     zoomInBtn: $('zoomInBtn'),
     zoomFitBtn: $('zoomFitBtn'),
     zoomPct: $('zoomPct'),
+    panBtn: $('panBtn'),
     fontUploadBtn: $('fontUploadBtn'),
     fontInput: $('fontInput'),
     canvasArea: $('canvasArea'),
@@ -82,6 +83,14 @@
     helpModal: $('helpModal'),
     helpModalClose: $('helpModalClose'),
     helpModalOk: $('helpModalOk'),
+    storageQuotaModal: $('storageQuotaModal'),
+    storageQuotaTitle: $('storageQuotaTitle'),
+    storageQuotaUsage: $('storageQuotaUsage'),
+    storageQuotaClose: $('storageQuotaClose'),
+    storageQuotaExportProject: $('storageQuotaExportProject'),
+    storageQuotaExportPng: $('storageQuotaExportPng'),
+    storageQuotaClear: $('storageQuotaClear'),
+    storageQuotaLater: $('storageQuotaLater'),
     sidebarCollapseGallery: $('sidebarCollapseGallery'),
     sidebarCollapseProps: $('sidebarCollapseProps')
   };

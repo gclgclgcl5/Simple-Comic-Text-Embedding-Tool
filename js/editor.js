@@ -16,12 +16,14 @@
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   const CONFIRM_BTN_GAP = 8;
   const CONFIRM_PAIR_WIDTH = 72;
-  const ZOOM_STEPS = [0.5, 0.67, 1, 1.5, 2, 3];
+  const ZOOM_STEPS = [0.5, 0.67, 1, 1.5, 2, 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20];
   const ZOOM_MIN = 0.5;
-  const ZOOM_MAX = 3;
+  const ZOOM_MAX = 20;
 
   let measureCanvas = null;
   let viewZoom = 1;
+  let panMode = false;
+  let panDrag = null;
   let rotateSession = {
     active: false,
     textId: null,
@@ -585,6 +587,50 @@
 
   function getZoom() { return viewZoom; }
 
+  function isPanMode() { return panMode; }
+
+  function syncPanUI() {
+    const { panBtn } = App.Dom;
+    const has = !!State.current();
+    if (panBtn) {
+      panBtn.disabled = !has;
+      panBtn.classList.toggle('on', panMode);
+      panBtn.setAttribute('aria-pressed', panMode ? 'true' : 'false');
+    }
+    if (canvasArea) {
+      canvasArea.classList.toggle('is-panning', panMode);
+      canvasArea.classList.toggle('is-pan-dragging', !!(panMode && panDrag));
+    }
+    if (stage) {
+      stage.classList.toggle('mode-pan', panMode);
+      stage.classList.toggle('is-pan-dragging', !!(panMode && panDrag));
+    }
+  }
+
+  function endPanDrag() {
+    if (!panDrag) return;
+    panDrag = null;
+    if (canvasArea) canvasArea.classList.remove('is-pan-dragging');
+    if (stage) stage.classList.remove('is-pan-dragging');
+  }
+
+  function setPanMode(on) {
+    const next = !!on && !!State.current();
+    if (next === panMode) {
+      syncPanUI();
+      return panMode;
+    }
+    panMode = next;
+    endPanDrag();
+    syncPanUI();
+    if (App.Draw && typeof App.Draw.updateCursor === 'function') App.Draw.updateCursor();
+    return panMode;
+  }
+
+  function togglePanMode() {
+    return setPanMode(!panMode);
+  }
+
   function syncZoomUI() {
     const { zoomPct, zoomOutBtn, zoomInBtn, zoomFitBtn } = App.Dom;
     const has = !!State.current();
@@ -597,6 +643,7 @@
     if (zoomOutBtn) zoomOutBtn.disabled = !has;
     if (zoomInBtn) zoomInBtn.disabled = !has;
     if (zoomFitBtn) zoomFitBtn.disabled = !has;
+    syncPanUI();
   }
 
   function computeFitSize() {
@@ -688,6 +735,7 @@
   }
 
   function resetZoom() {
+    setPanMode(false);
     viewZoom = 1;
     if (State.current()) {
       layoutStage();
@@ -705,6 +753,7 @@
     const img = State.getImage(id);
     if (!img) return;
     abortRotateIfNeeded();
+    setPanMode(false);
     if (App.Main && App.Main.endPeekOriginal) App.Main.endPeekOriginal();
     else if (stage) stage.classList.remove('peek-original');
     State.currentId = id;
@@ -923,6 +972,7 @@
   }
 
   function onBoxPointerDown(e, box, t) {
+    if (panMode) return;
     if (!State.isTextMode()) return;
     if (e.button !== 0) return;
     if (e.target.closest('.text-rotate-confirm')) return;
@@ -1103,9 +1153,44 @@
     return wrapText(text, fs, maxW, ctx);
   }
 
+  function onPanPointerDown(e) {
+    if (!panMode || !canvasArea || !State.current()) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    panDrag = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollLeft: canvasArea.scrollLeft,
+      scrollTop: canvasArea.scrollTop
+    };
+    try { canvasArea.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    syncPanUI();
+  }
+
+  function onPanPointerMove(e) {
+    if (!panDrag || e.pointerId !== panDrag.pointerId || !canvasArea) return;
+    canvasArea.scrollLeft = panDrag.scrollLeft - (e.clientX - panDrag.startX);
+    canvasArea.scrollTop = panDrag.scrollTop - (e.clientY - panDrag.startY);
+  }
+
+  function onPanPointerUp(e) {
+    if (!panDrag || (e && e.pointerId !== panDrag.pointerId)) return;
+    endPanDrag();
+    syncPanUI();
+  }
+
+  if (canvasArea) {
+    canvasArea.addEventListener('pointerdown', onPanPointerDown);
+    canvasArea.addEventListener('pointermove', onPanPointerMove);
+    canvasArea.addEventListener('pointerup', onPanPointerUp);
+    canvasArea.addEventListener('pointercancel', onPanPointerUp);
+  }
+
   App.Editor = {
     selectImage, layoutStage, stageH, syncPropsUI,
     getZoom, setZoom, zoomByStep, zoomAt, resetZoom, syncZoomUI,
+    isPanMode, setPanMode, togglePanMode, syncPanUI,
     applyPreviewWeight, syncBox, renderBoxes, onBoxPointerDown,
     selectBox, clearSelection, addText, removeText, wrapText, wrapTextForDisplay,
     pushHistory, pushHistoryDebounced, undo, redo,
