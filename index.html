@@ -32,6 +32,9 @@
     <details class="header-more">
       <summary class="icon-btn" title="更多" aria-label="更多">⋯</summary>
       <div class="header-more-menu">
+        <button type="button" class="btn btn-mini btn-block" id="fontRemapBtn" disabled title="请先勾选要复制的散图或一个工程">换字体副本</button>
+        <button type="button" class="btn btn-mini btn-block" id="termRemapBtn" disabled title="请先勾选要复制的散图或一个工程">换名词副本</button>
+        <button type="button" class="btn btn-mini btn-block" id="comboRemapBtn" disabled title="请先勾选要复制的散图或一个工程">组合替换副本</button>
         <button type="button" class="btn btn-mini btn-block" id="clearCacheBtn" title="清除本地保存的图片、工程、编辑与上传字体">清除缓存</button>
       </div>
     </details>
@@ -387,6 +390,12 @@
       </ul>
       <h3>画布缩放与平移</h3>
       <p>工作区顶栏可缩放画布（<kbd>Ctrl+滚轮</kbd> 亦可）。放大后点顶栏<strong>手型</strong>按钮，拖动画布查看细节；再点一次或按 <kbd>Esc</kbd> 退出。</p>
+      <h3>换字体副本</h3>
+      <p>在左侧勾选<strong>仅散图</strong>或<strong>仅一个工程</strong>后，打开顶栏「更多 → 换字体副本」，将用到的字体映射到已加载字体，生成「某某-换字体副本」工程；原件保留。散图与工程不可混选，也不可同时勾选多个工程。</p>
+      <h3>换名词副本</h3>
+      <p>同样勾选规则下，打开「更多 → 换名词副本」。填写「搜索=替换」规则（可导入 UTF-8 文本，每行 <code>搜索=替换</code>），先<strong>搜索</strong>查看命中数，再<strong>替换</strong>生成「某某-换名词副本」。整词匹配；替换留空表示删除；规则命中区间重叠时会中止。</p>
+      <h3>组合替换副本</h3>
+      <p>「更多 → 组合替换副本」：先映射字体，再设置名词并搜索，确认后<strong>只生成一份</strong>「某某-组合替换副本」工程（字体与名词均已替换，原件保留）。</p>
       <h3>智能遮盖怎么用</h3>
       <p>进入<strong>画图模式</strong>，选矩形或异形泡工具，在图上拖出选区，松手后自动用底色盖住原字。不准就 <kbd>Ctrl+Z</kbd> 撤销，再改用手涂或形状补。</p>
       <ul>
@@ -413,6 +422,122 @@
     </div>
     <div class="modal-footer">
       <button type="button" class="btn primary" id="helpModalOk">知道了</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="comboRemapModal">
+  <div class="modal-card modal-card-combo-remap">
+    <div class="modal-header">
+      <span class="modal-title">组合替换副本</span>
+      <button type="button" class="icon-btn" id="comboRemapClose" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="comboRemapHint" class="term-remap-hint">先映射字体，再替换名词；只生成一份工程。</p>
+      <div id="comboRemapStep1">
+        <h3 class="combo-remap-step-title">步骤 1：字体映射</h3>
+        <div id="comboRemapFontList" class="font-remap-list" role="list"></div>
+      </div>
+      <div id="comboRemapStep2" hidden>
+        <h3 class="combo-remap-step-title">步骤 2：名词替换</h3>
+        <label class="term-remap-case">
+          <input type="checkbox" id="comboRemapCase">
+          区分大小写
+        </label>
+        <div id="comboRemapTermList" class="term-remap-list" role="list"></div>
+        <div class="term-remap-actions">
+          <button type="button" class="btn btn-mini" id="comboRemapAddRow">加一行</button>
+          <button type="button" class="btn btn-mini" id="comboRemapImport">导入 txt</button>
+          <input type="file" id="comboRemapImportInput" accept=".txt,text/plain" hidden>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="comboRemapCancel">取消</button>
+      <button type="button" class="btn" id="comboRemapBack" hidden>上一步</button>
+      <button type="button" class="btn primary" id="comboRemapNext">下一步</button>
+      <button type="button" class="btn" id="comboRemapSearch" hidden>搜索</button>
+      <button type="button" class="btn primary" id="comboRemapGenerate" hidden disabled>生成副本</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="comboRemapResultModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">组合替换结果</span>
+      <button type="button" class="icon-btn" id="comboRemapResultClose" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="comboRemapResultBody"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn primary" id="comboRemapResultOk">知道了</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="termRemapModal">
+  <div class="modal-card modal-card-term-remap">
+    <div class="modal-header">
+      <span class="modal-title">换名词副本</span>
+      <button type="button" class="icon-btn" id="termRemapClose" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="termRemapHint" class="term-remap-hint">填写搜索与替换规则，先搜索再替换；留空替换表示删除该词。</p>
+      <label class="term-remap-case">
+        <input type="checkbox" id="termRemapCase">
+        区分大小写
+      </label>
+      <div id="termRemapList" class="term-remap-list" role="list"></div>
+      <div class="term-remap-actions">
+        <button type="button" class="btn btn-mini" id="termRemapAddRow">加一行</button>
+        <button type="button" class="btn btn-mini" id="termRemapImport">导入 txt</button>
+        <input type="file" id="termRemapImportInput" accept=".txt,text/plain" hidden>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="termRemapCancel">取消</button>
+      <button type="button" class="btn" id="termRemapSearch">搜索</button>
+      <button type="button" class="btn primary" id="termRemapReplace" disabled>替换</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="termRemapResultModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span class="modal-title">替换结果</span>
+      <button type="button" class="icon-btn" id="termRemapResultClose" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="termRemapResultBody"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn primary" id="termRemapResultOk">知道了</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="fontRemapModal">
+  <div class="modal-card modal-card-font-remap">
+    <div class="modal-header">
+      <span class="modal-title">换字体副本</span>
+      <button type="button" class="icon-btn" id="fontRemapClose" aria-label="关闭">
+        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="fontRemapHint" class="font-remap-hint">为所选图片中的字体指定替换目标，生成新工程副本（原件保留）。</p>
+      <div id="fontRemapList" class="font-remap-list" role="list"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="fontRemapCancel">取消</button>
+      <button type="button" class="btn primary" id="fontRemapConfirm">确认生成</button>
     </div>
   </div>
 </dialog>
@@ -485,6 +610,10 @@
 <script src="js/draw.js" defer></script>
 <script src="js/draw-toolbar.js" defer></script>
 <script src="js/shape-presets.js" defer></script>
+<script src="js/remap-copy.js" defer></script>
+<script src="js/font-remap.js" defer></script>
+<script src="js/term-remap.js" defer></script>
+<script src="js/combo-remap.js" defer></script>
 <script src="js/project-io.js" defer></script>
 <script src="js/export.js" defer></script>
 <script src="js/main.js" defer></script>

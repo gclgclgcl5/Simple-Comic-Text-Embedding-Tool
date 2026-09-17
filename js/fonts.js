@@ -126,8 +126,12 @@
     return !!(family && bundledFamilies.has(family));
   }
 
+  function listLoadedFamilies() {
+    return BUNDLED_FONTS.map(f => f.family).concat(customFonts.slice());
+  }
+
   App.Fonts = {
     BUNDLED_FONTS, injectBundledFonts, refreshFontSelect, addFontFile,
-    registerFont, loadFontFromStorage, isBundledFamily
+    registerFont, loadFontFromStorage, isBundledFamily, listLoadedFamilies
   };
 })(window.App = window.App || {});

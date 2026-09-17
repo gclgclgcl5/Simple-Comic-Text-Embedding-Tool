@@ -82,6 +82,9 @@
       checkAll.indeterminate = rootSel > 0 && rootSel < roots.length;
       if (checkAllText) checkAllText.textContent = '全选';
     }
+    if (App.FontRemap && App.FontRemap.syncMenuButton) App.FontRemap.syncMenuButton();
+    if (App.TermRemap && App.TermRemap.syncMenuButton) App.TermRemap.syncMenuButton();
+    if (App.ComboRemap && App.ComboRemap.syncMenuButton) App.ComboRemap.syncMenuButton();
   }
 
   function imageVisibleInCurrentView(img) {

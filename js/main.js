@@ -70,6 +70,9 @@
     App.Fonts.refreshFontSelect();
     if (!restored) App.Toolbar.syncDefaultStylePanel();
     App.Draw.bindPointerEvents();
+    if (App.FontRemap && App.FontRemap.init) App.FontRemap.init();
+    if (App.TermRemap && App.TermRemap.init) App.TermRemap.init();
+    if (App.ComboRemap && App.ComboRemap.init) App.ComboRemap.init();
 
     State.loadTeamMode();
     if (App.ProjectIO) App.ProjectIO.syncExportLabels();
