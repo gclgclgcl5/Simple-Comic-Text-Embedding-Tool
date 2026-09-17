@@ -3,7 +3,7 @@
   "use strict";
 
   const State = App.State;
-  const { stage, drawRaster, drawShapeLayer } = App.Dom;
+  const { stage, drawRaster, drawShapeLayer, drawBrushCursor } = App.Dom;
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   const MIN_SHAPE = 0.008;
   const HISTORY_MAX = 50;
@@ -22,6 +22,9 @@
   /** @type {{ x0: number, y0: number, x1: number, y1: number } | null} 归一化轴对齐选区 */
   let smartfillPreview = null;
   let lastToolBeforeEyedropper = 'brush';
+  /** @type {{ x: number, y: number } | null} 舞台内坐标 */
+  let brushCursorPos = null;
+  let brushCursorHovering = false;
 
   function ensureDraw(img) {
     if (!img.draw) img.draw = App.Gallery.createDrawState();
@@ -423,15 +426,103 @@
     updateCursor();
   }
 
+  function isBrushCursorTool(tool) {
+    return tool === 'brush' || tool === 'eraser';
+  }
+
+  function hideBrushCursorEl() {
+    if (drawBrushCursor) drawBrushCursor.hidden = true;
+  }
+
+  function updateBrushCursor() {
+    if (!drawBrushCursor) return;
+    const pan = App.Editor && App.Editor.isPanMode && App.Editor.isPanMode();
+    const tool = State.drawPrefs.tool;
+    const show = State.isDrawMode()
+      && !pan
+      && isBrushCursorTool(tool)
+      && brushCursorHovering
+      && brushCursorPos
+      && State.current();
+
+    if (!show) {
+      hideBrushCursorEl();
+      return;
+    }
+
+    const prefs = State.drawPrefs;
+    const size = Math.max(1, tool === 'eraser' ? prefs.eraserSize : prefs.brushSize);
+    drawBrushCursor.hidden = false;
+    drawBrushCursor.classList.toggle('eraser', tool === 'eraser');
+    drawBrushCursor.style.width = size + 'px';
+    drawBrushCursor.style.height = size + 'px';
+    drawBrushCursor.style.left = brushCursorPos.x + 'px';
+    drawBrushCursor.style.top = brushCursorPos.y + 'px';
+  }
+
+  function refreshBrushCursorSize() {
+    updateBrushCursor();
+  }
+
+  function trackBrushCursor(e) {
+    if (!State.isDrawMode() || !isBrushCursorTool(State.drawPrefs.tool)) {
+      if (brushCursorHovering) {
+        brushCursorHovering = false;
+        updateCursor();
+      }
+      return;
+    }
+    if (App.Editor && App.Editor.isPanMode && App.Editor.isPanMode()) {
+      if (brushCursorHovering) {
+        brushCursorHovering = false;
+        updateCursor();
+      }
+      return;
+    }
+    const r = stage.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right
+      && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!inside) {
+      if (brushCursorHovering) {
+        brushCursorHovering = false;
+        updateCursor();
+      }
+      return;
+    }
+    brushCursorHovering = true;
+    brushCursorPos = { x: e.clientX - r.left, y: e.clientY - r.top };
+    updateCursor();
+  }
+
+  function onBrushCursorLeave() {
+    if (!brushCursorHovering) return;
+    brushCursorHovering = false;
+    updateCursor();
+  }
+
   function updateCursor() {
     if (App.Editor && App.Editor.isPanMode && App.Editor.isPanMode()) {
       stage.style.cursor = '';
+      hideBrushCursorEl();
       return;
     }
-    if (!State.isDrawMode()) { stage.style.cursor = ''; return; }
+    if (!State.isDrawMode()) {
+      stage.style.cursor = '';
+      hideBrushCursorEl();
+      return;
+    }
     const img = State.current();
-    if (!img) return;
+    if (!img) {
+      hideBrushCursorEl();
+      return;
+    }
     const tool = State.drawPrefs.tool;
+    if (isBrushCursorTool(tool) && brushCursorHovering && brushCursorPos) {
+      stage.style.cursor = 'none';
+      updateBrushCursor();
+      return;
+    }
+    hideBrushCursorEl();
     const cursors = {
       brush: 'crosshair', eraser: 'crosshair', rect: 'crosshair', ellipse: 'crosshair',
       eyedropper: 'crosshair', smartfill: 'crosshair', 'smartfill-bubble': 'crosshair'
@@ -558,6 +649,7 @@
   }
 
   function onPointerDown(e) {
+    trackBrushCursor(e);
     if (App.Editor && App.Editor.isPanMode && App.Editor.isPanMode()) return;
     if (!State.isDrawMode() || e.button !== 0) return;
     const img = State.current();
@@ -634,6 +726,7 @@
   }
 
   function onPointerMove(e) {
+    trackBrushCursor(e);
     if (!pointer || !State.isDrawMode()) return;
     const img = State.current();
     if (!img) return;
@@ -793,6 +886,7 @@
 
   function bindPointerEvents() {
     stage.addEventListener('pointerdown', onPointerDown);
+    stage.addEventListener('pointerleave', onBrushCursorLeave);
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
@@ -810,6 +904,7 @@
     getSelectedShape, insertShapeFromPreset, removeSelectedShape,
     onImageSelected, onStageResize, onModeChange, bindPointerEvents,
     undo, redo, setTool, applyDrawColor, saveSnapshot, renderToExport, updatePointerEvents, updateCursor,
+    refreshBrushCursorSize, updateBrushCursor,
     serializeUndoForDisk, hydrateUndoFromDisk, DISK_UNDO_MAX
   };
 })(window.App = window.App || {});

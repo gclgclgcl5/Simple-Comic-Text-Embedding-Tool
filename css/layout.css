@@ -356,8 +356,13 @@ body.gallery-collapsed.props-collapsed .app-main {
 
 #stage.mode-pan .text-box,
 #stage.mode-pan #drawRaster,
-#stage.mode-pan #drawShapeLayer {
+#stage.mode-pan #drawShapeLayer,
+#stage.mode-pan #drawBrushCursor {
   pointer-events: none;
+}
+
+#stage.mode-pan #drawBrushCursor {
+  visibility: hidden !important;
 }
 
 .zoom-ctrl .btn {
@@ -721,6 +726,26 @@ body.drag-active .dropzone {
   overflow: visible;
 }
 
+#drawBrushCursor {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  touch-action: none;
+}
+
+#drawBrushCursor.eraser {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+}
+
 .draw-shape {
   position: absolute;
   pointer-events: none;
@@ -777,6 +802,7 @@ body.drag-active .dropzone {
 /* Hold Space: peek original image */
 #stage.peek-original #drawRaster,
 #stage.peek-original #drawShapeLayer,
+#stage.peek-original #drawBrushCursor,
 #stage.peek-original .text-box,
 #stage.peek-original .text-rotate-confirm {
   visibility: hidden !important;

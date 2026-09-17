@@ -112,6 +112,7 @@
     drawToolbar: $('drawToolbar'),
     drawRaster: $('drawRaster'),
     drawShapeLayer: $('drawShapeLayer'),
+    drawBrushCursor: $('drawBrushCursor'),
     drawColor: $('drawColor'),
     drawColorBtn: $('drawColorBtn'),
     drawBrushSize: $('drawBrushSize'),

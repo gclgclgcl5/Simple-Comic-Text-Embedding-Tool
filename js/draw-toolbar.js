@@ -106,11 +106,13 @@
     if (drawBrushSize) {
       drawBrushSize.addEventListener('input', () => {
         State.setDrawPrefsPartial({ brushSize: +drawBrushSize.value });
+        if (App.Draw && App.Draw.refreshBrushCursorSize) App.Draw.refreshBrushCursorSize();
       });
     }
     if (drawEraserSize) {
       drawEraserSize.addEventListener('input', () => {
         State.setDrawPrefsPartial({ eraserSize: +drawEraserSize.value });
+        if (App.Draw && App.Draw.refreshBrushCursorSize) App.Draw.refreshBrushCursorSize();
       });
     }
 
