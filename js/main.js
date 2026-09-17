@@ -37,6 +37,7 @@
   async function init() {
     App.UI.init();
     State.loadLastStyle();
+    State.loadDrawPrefs();
     App.Fonts.injectBundledFonts();
 
     const storageOk = await App.Storage.open();

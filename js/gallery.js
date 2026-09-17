@@ -15,10 +15,6 @@
 
   function createDrawState() {
     return {
-      tool: 'brush',
-      color: '#ffffff',
-      brushSize: 12,
-      eraserSize: 20,
       selectedShapeId: null,
       shapes: [],
       rasterCanvas: null,

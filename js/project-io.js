@@ -311,10 +311,7 @@
             editJson = JSON.parse(await entryToText(editEn));
             img.texts = JSON.parse(JSON.stringify(editJson.texts || []));
             if (editJson.draw) {
-              img.draw.tool = editJson.draw.tool || 'brush';
-              img.draw.color = editJson.draw.color || '#ffffff';
-              img.draw.brushSize = editJson.draw.brushSize ?? 12;
-              img.draw.eraserSize = editJson.draw.eraserSize ?? 20;
+              // tool/color/sizes 为全局偏好，工程包内旧字段不覆盖
               img.draw.selectedShapeId = null;
             }
             img.draw.shapes = JSON.parse(JSON.stringify(editJson.shapes || []));

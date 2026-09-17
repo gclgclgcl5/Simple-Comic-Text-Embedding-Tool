@@ -431,7 +431,7 @@
     if (!State.isDrawMode()) { stage.style.cursor = ''; return; }
     const img = State.current();
     if (!img) return;
-    const tool = ensureDraw(img).tool;
+    const tool = State.drawPrefs.tool;
     const cursors = {
       brush: 'crosshair', eraser: 'crosshair', rect: 'crosshair', ellipse: 'crosshair',
       eyedropper: 'crosshair', smartfill: 'crosshair', 'smartfill-bubble': 'crosshair'
@@ -518,7 +518,7 @@
     deselectShape();
     syncDrawPreview(img);
     App.DrawToolbar.updateHistoryButtons();
-    App.DrawToolbar.syncUIFromDraw(img);
+    App.DrawToolbar.syncUIFromPrefs(img);
   }
 
   function onStageResize() {
@@ -540,7 +540,7 @@
       ctx.fillStyle = 'rgba(0,0,0,1)';
     } else {
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = ensureDraw(State.current()).color;
+      ctx.fillStyle = State.drawPrefs.color;
     }
     ctx.beginPath();
     ctx.arc(x, y, size / 2, 0, Math.PI * 2);
@@ -563,24 +563,26 @@
     const img = State.current();
     if (!img || e.target.closest('#drawProps')) return;
     const d = ensureDraw(img);
+    const prefs = State.drawPrefs;
+    const tool = prefs.tool;
     const p = stageToImage(e.clientX, e.clientY, img);
     const sw = stage.clientWidth, sh = stage.clientHeight;
     const stageX = e.clientX - stage.getBoundingClientRect().left;
     const stageY = e.clientY - stage.getBoundingClientRect().top;
 
-    if (d.tool === 'eyedropper') {
+    if (tool === 'eyedropper') {
       e.preventDefault();
       pickColorAt(img, p.x, p.y);
       return;
     }
 
-    if (isSmartFillTool(d.tool)) {
+    if (isSmartFillTool(tool)) {
       e.preventDefault();
       deselectShape();
-      smartfillPreview = { x0: p.nx, y0: p.ny, x1: p.nx, y1: p.ny, bubble: d.tool === 'smartfill-bubble' };
+      smartfillPreview = { x0: p.nx, y0: p.ny, x1: p.nx, y1: p.ny, bubble: tool === 'smartfill-bubble' };
       pointer = {
         type: 'smartfill',
-        mode: d.tool === 'smartfill-bubble' ? 'bubble' : 'rect',
+        mode: tool === 'smartfill-bubble' ? 'bubble' : 'rect',
         startNX: p.nx, startNY: p.ny,
         before: saveSnapshot(img)
       };
@@ -588,19 +590,19 @@
       return;
     }
 
-    if (d.tool === 'brush' || d.tool === 'eraser') {
+    if (tool === 'brush' || tool === 'eraser') {
       e.preventDefault();
       const before = saveSnapshot(img);
-      pointer = { type: d.tool, before, lastX: p.x, lastY: p.y };
+      pointer = { type: tool, before, lastX: p.x, lastY: p.y };
       const ctx = ensureRaster(img).getContext('2d');
-      const size = (d.tool === 'eraser' ? d.eraserSize : d.brushSize) * scaleFactor(img);
-      if (d.tool === 'eraser') bakeIntersectingShapes(img, p.x, p.y, size / 2);
-      drawBrushDot(ctx, p.x, p.y, size, d.tool === 'eraser');
+      const size = (tool === 'eraser' ? prefs.eraserSize : prefs.brushSize) * scaleFactor(img);
+      if (tool === 'eraser') bakeIntersectingShapes(img, p.x, p.y, size / 2);
+      drawBrushDot(ctx, p.x, p.y, size, tool === 'eraser');
       syncDrawPreview(img);
       return;
     }
 
-    if (d.tool === 'rect' || d.tool === 'ellipse') {
+    if (tool === 'rect' || tool === 'ellipse') {
       const sel = d.selectedShapeId ? getShape(img, d.selectedShapeId) : null;
       if (sel) {
         const handle = hitTestHandle(sel, sw, sh, stageX, stageY);
@@ -625,8 +627,8 @@
       }
       deselectShape();
       e.preventDefault();
-      pointer = { type: 'create', shapeType: d.tool, startNX: p.nx, startNY: p.ny, before: saveSnapshot(img) };
-      previewShape = { type: d.tool, x: p.nx, y: p.ny, w: 0, h: 0, color: d.color };
+      pointer = { type: 'create', shapeType: tool, startNX: p.nx, startNY: p.ny, before: saveSnapshot(img) };
+      previewShape = { type: tool, x: p.nx, y: p.ny, w: 0, h: 0, color: prefs.color };
       syncDrawPreview(img);
     }
   }
@@ -640,7 +642,8 @@
 
     if (pointer.type === 'brush' || pointer.type === 'eraser') {
       const ctx = ensureRaster(img).getContext('2d');
-      const size = (pointer.type === 'eraser' ? d.eraserSize : d.brushSize) * scaleFactor(img);
+      const prefs = State.drawPrefs;
+      const size = (pointer.type === 'eraser' ? prefs.eraserSize : prefs.brushSize) * scaleFactor(img);
       if (pointer.type === 'eraser') bakeIntersectingShapes(img, p.x, p.y, size / 2);
       drawBrushLine(ctx, pointer.lastX, pointer.lastY, p.x, p.y, size, pointer.type === 'eraser');
       pointer.lastX = p.x;
@@ -665,7 +668,7 @@
       const r = Math.max(pointer.startNX, p.nx);
       const b = Math.max(pointer.startNY, p.ny);
       const ns = shapeFromBounds(l, t, r, b);
-      previewShape = { type: pointer.shapeType, ...ns, color: d.color };
+      previewShape = { type: pointer.shapeType, ...ns, color: State.drawPrefs.color };
       syncDrawPreview(img);
       return;
     }
@@ -757,28 +760,25 @@
 
   async function pickColorAt(img, ix, iy) {
     const hex = await App.Export.sampleColorAt(img, ix, iy);
-    ensureDraw(img).color = hex;
+    State.setDrawPrefsPartial({ color: hex });
     App.DrawToolbar.syncColorUI(hex);
-    const d = ensureDraw(img);
-    if (d.tool === 'eyedropper') setTool(lastToolBeforeEyedropper);
+    if (State.drawPrefs.tool === 'eyedropper') setTool(lastToolBeforeEyedropper);
   }
 
   function setTool(tool) {
-    const img = State.current();
-    if (!img) return;
-    const d = ensureDraw(img);
-    if (tool === 'eyedropper' && d.tool !== 'eyedropper') lastToolBeforeEyedropper = d.tool;
-    d.tool = tool;
+    const prefs = State.drawPrefs;
+    if (tool === 'eyedropper' && prefs.tool !== 'eyedropper') lastToolBeforeEyedropper = prefs.tool;
+    State.setDrawPrefsPartial({ tool });
     if (tool !== 'rect' && tool !== 'ellipse') deselectShape();
     App.DrawToolbar.syncToolButtons(tool);
     updateCursor();
   }
 
   function applyDrawColor(color) {
+    State.setDrawPrefsPartial({ color });
     const img = State.current();
     if (!img) return;
     const d = ensureDraw(img);
-    d.color = color;
     if (d.selectedShapeId) {
       const s = getShape(img, d.selectedShapeId);
       if (s && s.color !== color) {

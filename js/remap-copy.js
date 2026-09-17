@@ -127,10 +127,6 @@
 
     const draw = App.Gallery.createDrawState();
     if (src.draw) {
-      draw.tool = src.draw.tool || 'brush';
-      draw.color = src.draw.color || '#ffffff';
-      draw.brushSize = src.draw.brushSize ?? 12;
-      draw.eraserSize = src.draw.eraserSize ?? 20;
       draw.shapes = JSON.parse(JSON.stringify(src.draw.shapes || [])).map(s =>
         Object.assign({}, s, { id: State.uid() })
       );

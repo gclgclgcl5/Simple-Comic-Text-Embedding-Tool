@@ -29,14 +29,17 @@
   }
 
   function syncUIFromDraw(img) {
-    if (!img || !img.draw) return;
-    const d = img.draw;
-    syncColorUI(d.color);
-    if (drawBrushSize) drawBrushSize.value = String(d.brushSize);
-    if (drawEraserSize) drawEraserSize.value = String(d.eraserSize);
-    syncToolButtons(d.tool);
+    syncUIFromPrefs(img);
+  }
+
+  function syncUIFromPrefs(img) {
+    const prefs = State.drawPrefs;
+    syncColorUI(prefs.color);
+    if (drawBrushSize) drawBrushSize.value = String(prefs.brushSize);
+    if (drawEraserSize) drawEraserSize.value = String(prefs.eraserSize);
+    syncToolButtons(prefs.tool);
     updateHistoryButtons();
-    updateSizeSliders(d.tool);
+    updateSizeSliders(prefs.tool);
   }
 
   function syncToolButtons(tool) {
@@ -102,16 +105,12 @@
 
     if (drawBrushSize) {
       drawBrushSize.addEventListener('input', () => {
-        const img = State.current();
-        if (img) ensureDraw(img).brushSize = +drawBrushSize.value;
-        if (img && App.Storage && App.Storage.isAvailable()) App.Storage.scheduleSaveEdit(img.id);
+        State.setDrawPrefsPartial({ brushSize: +drawBrushSize.value });
       });
     }
     if (drawEraserSize) {
       drawEraserSize.addEventListener('input', () => {
-        const img = State.current();
-        if (img) ensureDraw(img).eraserSize = +drawEraserSize.value;
-        if (img && App.Storage && App.Storage.isAvailable()) App.Storage.scheduleSaveEdit(img.id);
+        State.setDrawPrefsPartial({ eraserSize: +drawEraserSize.value });
       });
     }
 
@@ -135,7 +134,7 @@
   function ensureDraw(img) { return App.Draw.ensureDraw(img); }
 
   App.DrawToolbar = {
-    init, applyDrawColor, syncColorUI, syncColorFromShape, syncUIFromDraw,
+    init, applyDrawColor, syncColorUI, syncColorFromShape, syncUIFromDraw, syncUIFromPrefs,
     syncToolButtons, updateHistoryButtons, updateDeleteButton, updateModeUI, setTool
   };
 })(window.App = window.App || {});

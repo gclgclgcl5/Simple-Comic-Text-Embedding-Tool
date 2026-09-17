@@ -271,14 +271,15 @@
   function snapshotEdit(img) {
     if (!img) return null;
     const d = img.draw || App.Gallery.createDrawState();
+    const prefs = App.State.drawPrefs || {};
     return {
       texts: JSON.parse(JSON.stringify(img.texts || [])),
       shapes: JSON.parse(JSON.stringify(d.shapes || [])),
       draw: {
-        tool: d.tool || 'brush',
-        color: d.color || '#ffffff',
-        brushSize: d.brushSize ?? 12,
-        eraserSize: d.eraserSize ?? 20,
+        tool: prefs.tool || 'brush',
+        color: prefs.color || '#ffffff',
+        brushSize: prefs.brushSize ?? 12,
+        eraserSize: prefs.eraserSize ?? 20,
         selectedShapeId: d.selectedShapeId || null
       }
     };
@@ -417,10 +418,7 @@
           if (edit) {
             img.texts = JSON.parse(JSON.stringify(edit.texts || []));
             if (edit.draw) {
-              img.draw.tool = edit.draw.tool || 'brush';
-              img.draw.color = edit.draw.color || '#ffffff';
-              img.draw.brushSize = edit.draw.brushSize ?? 12;
-              img.draw.eraserSize = edit.draw.eraserSize ?? 20;
+              // tool/color/sizes 已改为全局 drawPrefs；旧字段仅兼容，不覆盖偏好
               img.draw.selectedShapeId = edit.draw.selectedShapeId || null;
             }
             img.draw.shapes = JSON.parse(JSON.stringify(edit.shapes || []));

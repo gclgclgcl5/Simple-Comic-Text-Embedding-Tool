@@ -4,9 +4,14 @@
 
   const DEFAULT_FONT = '方正卡通简体';
   const STYLE_KEY = 'dsh_text_style_v1';
+  const DRAW_PREFS_KEY = 'dsh_draw_prefs_v1';
   const PRESET_KEY = 'dsh_color_presets_v1';
   const SHAPE_PRESET_KEY = 'dsh_shape_presets_v1';
   const SHAPE_PRESET_MIN = 0.004;
+  const DRAW_TOOLS = [
+    'brush', 'eraser', 'rect', 'ellipse', 'eyedropper',
+    'smartfill', 'smartfill-bubble'
+  ];
 
   let images = [];
   let projects = [];
@@ -21,6 +26,13 @@
   let lastStyle = {
     color: '#ffffff', fontPct: 0.05, fontFamily: DEFAULT_FONT,
     bold: false, vertical: false, stroke: false, strokeColor: '#000000', strokePct: 0.08
+  };
+
+  let drawPrefs = {
+    tool: 'brush',
+    color: '#ffffff',
+    brushSize: 12,
+    eraserSize: 20
   };
 
   function uid() { return 't' + (uidSeq++) + Date.now().toString(36); }
@@ -59,6 +71,44 @@
       if (typeof s.stroke === 'boolean') lastStyle.stroke = s.stroke;
     } catch (e) {}
     if (!lastStyle.fontFamily) lastStyle.fontFamily = DEFAULT_FONT;
+  }
+
+  function clampDrawSize(n, fallback) {
+    if (typeof n !== 'number' || !isFinite(n)) return fallback;
+    return Math.min(80, Math.max(1, Math.round(n)));
+  }
+
+  function saveDrawPrefs() {
+    try { localStorage.setItem(DRAW_PREFS_KEY, JSON.stringify(drawPrefs)); } catch (e) {}
+  }
+
+  function loadDrawPrefs() {
+    try {
+      const raw = localStorage.getItem(DRAW_PREFS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || typeof s !== 'object') return;
+      if (typeof s.tool === 'string' && DRAW_TOOLS.indexOf(s.tool) >= 0) drawPrefs.tool = s.tool;
+      if (validHex(s.color)) drawPrefs.color = s.color;
+      if (typeof s.brushSize === 'number') drawPrefs.brushSize = clampDrawSize(s.brushSize, 12);
+      if (typeof s.eraserSize === 'number') drawPrefs.eraserSize = clampDrawSize(s.eraserSize, 20);
+    } catch (e) {}
+  }
+
+  function setDrawPrefsPartial(patch) {
+    if (!patch || typeof patch !== 'object') return drawPrefs;
+    if (typeof patch.tool === 'string' && DRAW_TOOLS.indexOf(patch.tool) >= 0) {
+      drawPrefs.tool = patch.tool;
+    }
+    if (validHex(patch.color)) drawPrefs.color = patch.color;
+    if (typeof patch.brushSize === 'number') {
+      drawPrefs.brushSize = clampDrawSize(patch.brushSize, drawPrefs.brushSize);
+    }
+    if (typeof patch.eraserSize === 'number') {
+      drawPrefs.eraserSize = clampDrawSize(patch.eraserSize, drawPrefs.eraserSize);
+    }
+    saveDrawPrefs();
+    return drawPrefs;
   }
 
   function validHex(v) { return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v); }
@@ -194,6 +244,7 @@
     get uidSeq() { return uidSeq; },
     set uidSeq(v) { uidSeq = v; },
     get lastStyle() { return lastStyle; },
+    get drawPrefs() { return drawPrefs; },
     customFonts,
     get presets() { return presets; },
     set presets(v) { presets = v; },
@@ -201,6 +252,8 @@
     set shapePresets(v) { shapePresets = v; },
     DEFAULT_FONT,
     STYLE_KEY,
+    DRAW_PREFS_KEY,
+    DRAW_TOOLS,
     PRESET_KEY,
     SHAPE_PRESET_KEY,
     uid,
@@ -211,6 +264,9 @@
     imagesInProject,
     saveLastStyle,
     loadLastStyle,
+    saveDrawPrefs,
+    loadDrawPrefs,
+    setDrawPrefsPartial,
     validHex,
     validTextPreset,
     validShapePreset,
