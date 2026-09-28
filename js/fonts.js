@@ -4,7 +4,7 @@
 
   const { fontFormat, sanitizeFamily, baseNameFromPath, baseName, toast } = App.Utils;
   const { customFonts } = App.State;
-  const { tbFont } = App.Dom;
+  const { tbFont, tbFontBtn, tbFontMenu } = App.Dom;
   const { readZipEntries, inflateEntry } = App.Zip;
 
   const BUNDLED_FONTS = [
@@ -17,6 +17,52 @@
   ];
 
   const bundledFamilies = new Set(BUNDLED_FONTS.map(f => f.family));
+  const DEFAULT_LABEL = '默认（系统字体）';
+
+  function labelForFamily(family) {
+    return family ? family : DEFAULT_LABEL;
+  }
+
+  function getFontValue() {
+    return tbFont ? String(tbFont.value || '') : '';
+  }
+
+  function setFontValue(family) {
+    const v = family == null ? '' : String(family);
+    if (tbFont) tbFont.value = v;
+    if (tbFontBtn) tbFontBtn.textContent = labelForFamily(v);
+    if (tbFontMenu) {
+      tbFontMenu.querySelectorAll('.font-picker-item').forEach(btn => {
+        const on = (btn.dataset.family || '') === v;
+        btn.classList.toggle('on', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+    }
+    return v;
+  }
+
+  function appendFontItem(parent, family, label) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'font-picker-item';
+    btn.dataset.family = family;
+    btn.setAttribute('role', 'option');
+    btn.textContent = label;
+    if (family) btn.style.fontFamily = '"' + family + '", sans-serif';
+    parent.appendChild(btn);
+    return btn;
+  }
+
+  function appendGroup(menu, title) {
+    const g = document.createElement('div');
+    g.className = 'font-picker-group';
+    const hd = document.createElement('div');
+    hd.className = 'font-picker-group-title';
+    hd.textContent = title;
+    g.appendChild(hd);
+    menu.appendChild(g);
+    return g;
+  }
 
   function injectBundledFonts() {
     let css = '';
@@ -31,33 +77,20 @@
   }
 
   function refreshFontSelect() {
-    const prev = tbFont.value;
-    tbFont.innerHTML = '';
-    const o0 = document.createElement('option');
-    o0.value = '';
-    o0.textContent = '默认（系统字体）';
-    tbFont.appendChild(o0);
-    const g1 = document.createElement('optgroup');
-    g1.label = '内置样式';
-    BUNDLED_FONTS.forEach(f => {
-      const o = document.createElement('option');
-      o.value = f.family;
-      o.textContent = f.family;
-      g1.appendChild(o);
-    });
-    tbFont.appendChild(g1);
-    if (customFonts.length) {
-      const g2 = document.createElement('optgroup');
-      g2.label = '上传样式';
-      customFonts.forEach(n => {
-        const o = document.createElement('option');
-        o.value = n;
-        o.textContent = n;
-        g2.appendChild(o);
-      });
-      tbFont.appendChild(g2);
+    const prev = getFontValue();
+    if (!tbFontMenu) {
+      if (tbFont) tbFont.value = prev;
+      return;
     }
-    tbFont.value = prev;
+    tbFontMenu.innerHTML = '';
+    appendFontItem(tbFontMenu, '', DEFAULT_LABEL);
+    const g1 = appendGroup(tbFontMenu, '内置样式');
+    BUNDLED_FONTS.forEach(f => appendFontItem(g1, f.family, f.family));
+    if (customFonts.length) {
+      const g2 = appendGroup(tbFontMenu, '上传样式');
+      customFonts.forEach(n => appendFontItem(g2, n, n));
+    }
+    setFontValue(prev);
   }
 
   function toArrayBuffer(data) {
@@ -132,6 +165,7 @@
 
   App.Fonts = {
     BUNDLED_FONTS, injectBundledFonts, refreshFontSelect, addFontFile,
-    registerFont, loadFontFromStorage, isBundledFamily, listLoadedFamilies
+    registerFont, loadFontFromStorage, isBundledFamily, listLoadedFamilies,
+    getFontValue, setFontValue, labelForFamily
   };
 })(window.App = window.App || {});

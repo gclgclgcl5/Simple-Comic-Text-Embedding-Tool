@@ -7,9 +7,28 @@
   const {
     stage, tbColor, tbColorBtn, tbStrokeColor, tbStrokeColorBtn,
     tbColorEyedropper, tbStrokeColorEyedropper,
-    tbSizeMinus, tbSize, tbSizePlus, tbFont, tbBold, tbVert, tbStroke, tbStrokeW, tbStrokeVal,
+    tbSizeMinus, tbSize, tbSizePlus, tbFont, tbFontBtn, tbFontMenu, fontPicker,
+    tbBold,
+    tbAlignLeft, tbAlignCenter, tbAlignRight,
+    tbVert, tbStroke, tbStrokeW, tbStrokeVal,
     tbRotateStart, tbRotateExit, tbRotateHint, tbRotMinus, tbRot, tbRotPlus, tbDelBtn
   } = App.Dom;
+
+  const ALIGN_BTNS = [
+    { el: tbAlignLeft, value: 'left' },
+    { el: tbAlignCenter, value: 'center' },
+    { el: tbAlignRight, value: 'right' }
+  ];
+
+  /** 字体悬停预览会话：打开菜单时快照，离开/关闭未提交则还原 */
+  let fontPreview = {
+    open: false,
+    savedFamily: null,
+    textId: null,
+    committed: false,
+    hoverTimer: null,
+    hoverToken: 0
+  };
 
   let textColorPick, strokeColorPick;
   let textEyedropperTarget = null;
@@ -190,11 +209,40 @@
       fontFamily: t.fontFamily || State.DEFAULT_FONT,
       bold: !!t.bold,
       vertical,
+      align: State.normalizeAlign(t.align),
       stroke: !!t.stroke,
       strokeColor: t.strokeColor || '#000000',
       strokePct: t.strokePct || 0.08,
       rotation: vertical ? 0 : App.Editor.getTextRotation(t)
     };
+  }
+
+  function syncAlignButtons(align, vertical) {
+    const a = State.normalizeAlign(align);
+    const disable = !!vertical;
+    ALIGN_BTNS.forEach(({ el, value }) => {
+      if (!el) return;
+      const on = !disable && value === a;
+      el.classList.toggle('on', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+      el.disabled = disable;
+    });
+  }
+
+  function applyAlign(next) {
+    if (App.Editor.isRotating()) return;
+    const align = State.normalizeAlign(next);
+    const t = selectedText();
+    if (t) {
+      if (t.vertical) return;
+      if (State.normalizeAlign(t.align) === align) return;
+      App.Editor.pushHistory();
+      t.align = align;
+      syncBoxFor(t);
+    }
+    State.lastStyle.align = align;
+    State.saveLastStyle();
+    syncAlignButtons(align, t && t.vertical);
   }
 
   function previewFontSize(fontPct) {
@@ -272,6 +320,7 @@
     t.fontFamily = p.fontFamily;
     t.bold = p.bold;
     t.vertical = p.vertical;
+    t.align = State.normalizeAlign(p.align);
     t.stroke = p.stroke;
     t.strokeColor = p.strokeColor;
     t.strokePct = p.strokePct;
@@ -368,10 +417,16 @@
     syncAngleInput(t);
 
     const lock = !!rotating;
-    [tbSizeMinus, tbSize, tbSizePlus, tbFont, tbBold, tbVert, tbStroke, tbStrokeW,
+    [tbSizeMinus, tbSize, tbSizePlus, tbFontBtn, tbBold, tbVert, tbStroke, tbStrokeW,
       tbColorBtn, tbStrokeColorBtn, tbColorEyedropper, tbStrokeColorEyedropper].forEach(el => {
       if (!el) return;
       el.disabled = lock;
+    });
+    if (lock && fontPreview.open) closeFontMenu(true);
+    // 竖排禁用对齐；旋转锁定时一并禁用
+    ALIGN_BTNS.forEach(({ el }) => {
+      if (!el) return;
+      el.disabled = lock || !!(t && t.vertical) || (!t && !!tbVert && tbVert.checked);
     });
     if (tbDelBtn) tbDelBtn.disabled = lock || !State.selectedTextId;
     document.querySelectorAll('.text-preset .preset-hit, .text-preset .preset-remove').forEach(el => {
@@ -383,10 +438,12 @@
     tbColor.value = t.color;
     textColorPick.syncSwatch();
     syncSizeInput(t);
-    tbFont.value = t.fontFamily || '';
+    if (App.Fonts && App.Fonts.setFontValue) App.Fonts.setFontValue(t.fontFamily || '');
+    else if (tbFont) tbFont.value = t.fontFamily || '';
     tbBold.classList.toggle('on', !!t.bold);
     tbBold.setAttribute('aria-pressed', t.bold ? 'true' : 'false');
     tbVert.checked = !!t.vertical;
+    syncAlignButtons(t.align, t.vertical);
     tbStroke.checked = !!t.stroke;
     tbStrokeColor.value = t.strokeColor || '#000000';
     strokeColorPick.syncSwatch();
@@ -400,16 +457,195 @@
     tbColor.value = ls.color;
     textColorPick.syncSwatch();
     syncSizeFromFontPct(ls.fontPct);
-    tbFont.value = ls.fontFamily || '';
+    if (App.Fonts && App.Fonts.setFontValue) App.Fonts.setFontValue(ls.fontFamily || '');
+    else if (tbFont) tbFont.value = ls.fontFamily || '';
     tbBold.classList.toggle('on', !!ls.bold);
     tbBold.setAttribute('aria-pressed', ls.bold ? 'true' : 'false');
     tbVert.checked = !!ls.vertical;
+    syncAlignButtons(ls.align, ls.vertical);
     tbStroke.checked = !!ls.stroke;
     tbStrokeColor.value = ls.strokeColor || '#000000';
     strokeColorPick.syncSwatch();
     tbStrokeW.value = Math.round((ls.strokePct || 0.08) * 100);
     tbStrokeVal.textContent = Math.round((ls.strokePct || 0.08) * 100) + '%';
     syncRotateControls();
+  }
+
+  function normalizeFamily(v) {
+    return v == null ? '' : String(v);
+  }
+
+  function clearFontHoverTimer() {
+    if (fontPreview.hoverTimer) {
+      clearTimeout(fontPreview.hoverTimer);
+      fontPreview.hoverTimer = null;
+    }
+  }
+
+  function restoreFontPreview() {
+    if (!fontPreview.open || fontPreview.committed) return;
+    const t = selectedText();
+    if (t && fontPreview.textId === t.id && fontPreview.savedFamily != null) {
+      const saved = normalizeFamily(fontPreview.savedFamily);
+      if (normalizeFamily(t.fontFamily) !== saved) {
+        t.fontFamily = saved;
+        syncBoxFor(t);
+      }
+    }
+    if (App.Fonts && App.Fonts.setFontValue) {
+      App.Fonts.setFontValue(fontPreview.savedFamily);
+    }
+  }
+
+  function closeFontMenu(restore) {
+    clearFontHoverTimer();
+    if (!fontPreview.open) {
+      if (tbFontMenu) tbFontMenu.hidden = true;
+      if (tbFontBtn) tbFontBtn.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    if (restore && !fontPreview.committed) restoreFontPreview();
+    fontPreview.open = false;
+    fontPreview.committed = false;
+    fontPreview.savedFamily = null;
+    fontPreview.textId = null;
+    if (tbFontMenu) tbFontMenu.hidden = true;
+    if (tbFontBtn) tbFontBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function positionFontMenu() {
+    if (!tbFontMenu || !tbFontBtn) return;
+    const r = tbFontBtn.getBoundingClientRect();
+    const width = Math.max(r.width, 160);
+    let left = r.left;
+    let top = r.bottom + 4;
+    const maxH = Math.min(280, window.innerHeight * 0.5);
+    if (top + maxH > window.innerHeight - 8) {
+      top = Math.max(8, r.top - 4 - Math.min(maxH, tbFontMenu.scrollHeight || maxH));
+    }
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - width - 8);
+    }
+    tbFontMenu.style.width = width + 'px';
+    tbFontMenu.style.left = left + 'px';
+    tbFontMenu.style.top = top + 'px';
+  }
+
+  function openFontMenu() {
+    if (App.Editor.isRotating()) return;
+    const t = selectedText();
+    fontPreview.open = true;
+    fontPreview.committed = false;
+    fontPreview.savedFamily = t
+      ? normalizeFamily(t.fontFamily)
+      : normalizeFamily(State.lastStyle.fontFamily);
+    fontPreview.textId = t ? t.id : null;
+    if (App.Fonts && App.Fonts.setFontValue) {
+      App.Fonts.setFontValue(fontPreview.savedFamily);
+    }
+    if (tbFontMenu) {
+      tbFontMenu.hidden = false;
+      positionFontMenu();
+    }
+    if (tbFontBtn) tbFontBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function previewFontOnCanvas(family) {
+    const t = selectedText();
+    if (!t || App.Editor.isRotating()) return;
+    const fam = normalizeFamily(family);
+    const token = ++fontPreview.hoverToken;
+    clearFontHoverTimer();
+    fontPreview.hoverTimer = setTimeout(async () => {
+      fontPreview.hoverTimer = null;
+      if (!fontPreview.open || fontPreview.committed) return;
+      if (token !== fontPreview.hoverToken) return;
+      const cur = selectedText();
+      if (!cur || cur.id !== fontPreview.textId) return;
+      if (fam && App.Editor.prepareTextFont) {
+        try {
+          const fs = Math.max(6, Math.round(cur.fontPct * App.Editor.stageH()));
+          await document.fonts.load(fs + 'px "' + fam + '"');
+        } catch (e) { /* ignore */ }
+      }
+      if (token !== fontPreview.hoverToken || !fontPreview.open) return;
+      const again = selectedText();
+      if (!again || again.id !== fontPreview.textId) return;
+      again.fontFamily = fam;
+      syncBoxFor(again);
+    }, 50);
+  }
+
+  function commitFontFamily(family) {
+    if (App.Editor.isRotating()) return;
+    const fam = normalizeFamily(family);
+    const t = selectedText();
+    const before = (fontPreview.open && fontPreview.savedFamily != null)
+      ? normalizeFamily(fontPreview.savedFamily)
+      : (t ? normalizeFamily(t.fontFamily) : normalizeFamily(State.lastStyle.fontFamily));
+    clearFontHoverTimer();
+    fontPreview.hoverToken++;
+    if (t) {
+      // 悬停可能已改成预览字体；先回到打开菜单时的字体再压历史，保证 Ctrl+Z 正确
+      t.fontFamily = before;
+      if (before !== fam) App.Editor.pushHistory();
+      t.fontFamily = fam;
+      syncBoxFor(t);
+    }
+    State.lastStyle.fontFamily = fam;
+    State.saveLastStyle();
+    if (App.Fonts && App.Fonts.setFontValue) App.Fonts.setFontValue(fam);
+    else if (tbFont) tbFont.value = fam;
+    fontPreview.committed = true;
+    closeFontMenu(false);
+  }
+
+  function bindFontPickerEvents() {
+    if (!tbFontBtn || !tbFontMenu) return;
+
+    tbFontBtn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (App.Editor.isRotating() || tbFontBtn.disabled) return;
+      if (fontPreview.open) closeFontMenu(true);
+      else openFontMenu();
+    });
+
+    tbFontMenu.addEventListener('pointerleave', () => {
+      if (!fontPreview.open || fontPreview.committed) return;
+      clearFontHoverTimer();
+      fontPreview.hoverToken++;
+      restoreFontPreview();
+    });
+
+    tbFontMenu.addEventListener('pointerover', e => {
+      const item = e.target.closest('.font-picker-item');
+      if (!item || !tbFontMenu.contains(item)) return;
+      if (!fontPreview.open || fontPreview.committed) return;
+      previewFontOnCanvas(item.dataset.family || '');
+    });
+
+    tbFontMenu.addEventListener('click', e => {
+      const item = e.target.closest('.font-picker-item');
+      if (!item || !tbFontMenu.contains(item)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      commitFontFamily(item.dataset.family || '');
+    });
+
+    document.addEventListener('pointerdown', e => {
+      if (!fontPreview.open) return;
+      if (fontPicker && fontPicker.contains(e.target)) return;
+      closeFontMenu(true);
+    });
+
+    document.addEventListener('keydown', e => {
+      if (!fontPreview.open) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFontMenu(true);
+      }
+    });
   }
 
   function initColorPicks() {
@@ -527,17 +763,7 @@
       }, { passive: false });
     }
 
-    tbFont.addEventListener('change', () => {
-      if (App.Editor.isRotating()) return;
-      const t = selectedText();
-      if (t) {
-        App.Editor.pushHistory();
-        t.fontFamily = tbFont.value;
-        syncBoxFor(t);
-      }
-      State.lastStyle.fontFamily = tbFont.value;
-      State.saveLastStyle();
-    });
+    bindFontPickerEvents();
 
     tbBold.addEventListener('click', () => {
       if (App.Editor.isRotating()) return;
@@ -554,6 +780,11 @@
       tbBold.setAttribute('aria-pressed', next ? 'true' : 'false');
     });
 
+    ALIGN_BTNS.forEach(({ el, value }) => {
+      if (!el) return;
+      el.addEventListener('click', () => applyAlign(value));
+    });
+
     tbVert.addEventListener('change', () => {
       if (App.Editor.isRotating()) {
         tbVert.checked = !tbVert.checked;
@@ -565,6 +796,9 @@
         t.vertical = tbVert.checked;
         if (t.vertical) t.rotation = 0;
         syncBoxFor(t);
+        syncAlignButtons(t.align, t.vertical);
+      } else {
+        syncAlignButtons(State.lastStyle.align, tbVert.checked);
       }
       State.lastStyle.vertical = tbVert.checked;
       State.saveLastStyle();

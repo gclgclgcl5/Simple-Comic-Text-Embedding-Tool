@@ -489,7 +489,9 @@ body.drag-active .dropzone {
 /* Text boxes on canvas — above draw layers so text sits on shapes/brush */
 #stage.mode-text-eyedropper,
 #stage.mode-text-eyedropper .text-box,
-#stage.mode-text-eyedropper .text-box textarea {
+#stage.mode-text-eyedropper .text-box textarea,
+#stage.mode-text-eyedropper .text-box .text-face,
+#stage.mode-text-eyedropper .text-box .text-edit {
   cursor: crosshair !important;
 }
 
@@ -499,10 +501,41 @@ body.drag-active .dropzone {
   touch-action: none;
 }
 
-.text-box textarea {
-  position: relative;
+/* wrapText 展示层：仅硬换行 + 算法软折行，浏览器不再二次折行 */
+.text-box .text-face {
+  position: absolute;
+  inset: 0;
   z-index: 0;
+  margin: 0;
+  padding: 1px 6px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: transparent;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-family: var(--font-stack);
+  line-height: 1.25;
+  text-align: center;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.text-box .text-face.is-placeholder {
+  color: color-mix(in srgb, currentColor 45%, transparent);
+}
+
+/* 编辑层：默认透明可点；editing 时显现 */
+.text-box .text-edit,
+.text-box textarea.text-edit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   width: 100%;
+  height: 100%;
   resize: none;
   overflow: hidden;
   background: transparent;
@@ -516,23 +549,50 @@ body.drag-active .dropzone {
   text-align: center;
   outline: none;
   white-space: pre-wrap;
-  word-break: keep-all;
+  word-break: normal;
   overflow-wrap: break-word;
   cursor: text;
   display: block;
+  opacity: 0;
 }
 
-.text-box textarea::placeholder {
+.text-box .text-edit::placeholder,
+.text-box textarea.text-edit::placeholder {
   color: color-mix(in srgb, currentColor 45%, transparent);
   opacity: 1;
 }
 
-.text-box.selected textarea {
+.text-box.editing .text-face {
+  visibility: hidden;
+}
+
+.text-box.editing .text-edit,
+.text-box.editing textarea.text-edit {
+  opacity: 1;
+}
+
+/* 竖排：仍用 textarea 直接展示与编辑 */
+.text-box.is-vertical .text-face {
+  display: none;
+}
+
+.text-box.is-vertical .text-edit,
+.text-box.is-vertical textarea.text-edit {
+  position: relative;
+  inset: auto;
+  opacity: 1;
+}
+
+.text-box.selected:not(.editing) .text-face,
+.text-box.selected.editing .text-edit,
+.text-box.selected.is-vertical .text-edit {
   outline: 2px dashed var(--accent);
   outline-offset: 1px;
 }
 
-.text-box.dragging textarea {
+.text-box.dragging:not(.editing) .text-face,
+.text-box.dragging.editing .text-edit,
+.text-box.dragging.is-vertical .text-edit {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -625,7 +685,8 @@ body.drag-active .dropzone {
   cursor: nesw-resize;
 }
 
-.text-box.selected:not(.dragging) textarea {
+.text-box.selected:not(.dragging) .text-edit,
+.text-box.selected:not(.dragging) textarea.text-edit {
   cursor: text;
 }
 
@@ -638,7 +699,8 @@ body.drag-active .dropzone {
   cursor: grabbing;
 }
 
-.text-box.rotating textarea {
+.text-box.rotating .text-edit,
+.text-box.rotating textarea.text-edit {
   pointer-events: none;
   cursor: grab;
   user-select: none;
@@ -795,7 +857,8 @@ body.drag-active .dropzone {
   pointer-events: none;
 }
 
-#editor.mode-draw .text-box textarea {
+#editor.mode-draw .text-box textarea,
+#editor.mode-draw .text-box .text-edit {
   cursor: default;
 }
 

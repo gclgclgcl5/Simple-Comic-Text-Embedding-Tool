@@ -23,9 +23,16 @@
   let presets = [null, null, null, null];
   let shapePresets = [null, null, null, null, null, null];
 
+  const ALIGN_VALUES = ['left', 'center', 'right'];
+
+  function normalizeAlign(v) {
+    return (typeof v === 'string' && ALIGN_VALUES.indexOf(v) >= 0) ? v : 'center';
+  }
+
   let lastStyle = {
     color: '#ffffff', fontPct: 0.05, fontFamily: DEFAULT_FONT,
-    bold: false, vertical: false, stroke: false, strokeColor: '#000000', strokePct: 0.08
+    bold: false, vertical: false, align: 'center',
+    stroke: false, strokeColor: '#000000', strokePct: 0.08
   };
 
   let drawPrefs = {
@@ -69,8 +76,10 @@
       if (typeof s.bold === 'boolean') lastStyle.bold = s.bold;
       if (typeof s.vertical === 'boolean') lastStyle.vertical = s.vertical;
       if (typeof s.stroke === 'boolean') lastStyle.stroke = s.stroke;
+      lastStyle.align = normalizeAlign(s.align);
     } catch (e) {}
     if (!lastStyle.fontFamily) lastStyle.fontFamily = DEFAULT_FONT;
+    lastStyle.align = normalizeAlign(lastStyle.align);
   }
 
   function clampDrawSize(n, fallback) {
@@ -134,6 +143,7 @@
       fontFamily,
       bold: typeof v.bold === 'boolean' ? v.bold : false,
       vertical,
+      align: normalizeAlign(v.align),
       stroke: v.stroke,
       strokeColor: v.strokeColor,
       strokePct: v.strokePct,
@@ -268,6 +278,8 @@
     loadDrawPrefs,
     setDrawPrefsPartial,
     validHex,
+    normalizeAlign,
+    ALIGN_VALUES,
     validTextPreset,
     validShapePreset,
     loadPresets,

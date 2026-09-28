@@ -7,8 +7,8 @@
   const { canvasArea, stage, stageImg, emptyEditor, currentName, addTextBtn, exportOneBtn, tbDelBtn } = App.Dom;
 
   const TA_PAD_X = 6, TA_PAD_Y = 1, LH_RATIO = 1.25;
-  /** 换行测宽相对字号的余量，避免贴边框在导出时因字体 hinting 多断一行 */
-  const WRAP_SLACK_EM = 0.25;
+  /** @deprecated 折行宽已与 padding 对齐，不再使用 slack；保留常量以免外部引用报错 */
+  const WRAP_SLACK_EM = 0;
   const BOLD_RATIO = 0.05;
   const HISTORY_MAX = 50;
   const MIN_TEXT_W = 40;
@@ -316,13 +316,18 @@
     return TA_PAD_X * 2 + measureInk(t, fs);
   }
 
-  /**
-   * 换行用内容宽度：与 textarea 的 padding(左右各 6px)对齐，
-   * 并加字号相关余量，避免 CSS 能放下、Canvas measureText 多 1px 就断行。
-   */
+  function fontRef(fontFamily) {
+    return fontFamily ? ('"' + fontFamily + '"') : FONT;
+  }
+
+  /** 换行用内容宽度：与 .text-face / textarea padding(左右各 6px) 对齐 */
+  function contentMaxWidth(boxW) {
+    return Math.max(10, boxW - TA_PAD_X * 2);
+  }
+
+  /** @deprecated 使用 contentMaxWidth；保留别名兼容 resize 等调用 */
   function wrapContentWidth(boxW, fs) {
-    const slack = Math.max(0.5, fs * WRAP_SLACK_EM);
-    return Math.max(10, boxW - TA_PAD_X * 2 + slack);
+    return contentMaxWidth(boxW);
   }
 
   function isWidthFixed(t) {
@@ -345,7 +350,7 @@
   function layoutHorizontalText(t, fs, fontFamily, sw, sh, ctx) {
     const innerPad = textInnerPad(t, fs);
     const maxBoxW = Math.floor(sw * 0.85);
-    const famRef = fontFamily ? ('"' + fontFamily + '"') : FONT;
+    const famRef = fontRef(fontFamily);
     ctx.font = fs + 'px ' + famRef;
 
     const isEmpty = !(t.text && t.text.length);
@@ -361,12 +366,11 @@
     if (isWidthFixed(t)) {
       boxW = Math.max(MIN_TEXT_W, Math.min(maxBoxW, (t.widthPct || 0.4) * sw));
     } else {
-      // 自动宽度略留余量，避免框宽贴死最长行导致导出多断行
-      const contentW = Math.min(maxLineW + Math.ceil(fs * WRAP_SLACK_EM), Math.max(10, maxBoxW - innerPad));
+      const contentW = Math.min(maxLineW, Math.max(10, maxBoxW - innerPad));
       boxW = Math.min(Math.max(contentW + innerPad, MIN_TEXT_W), maxBoxW);
     }
 
-    const contentW = wrapContentWidth(boxW, fs);
+    const contentW = contentMaxWidth(boxW);
     const naturalH = naturalBoxHeight(t, fs, contentW, ctx);
     let boxH;
     if (isHeightFixed(t)) {
@@ -778,40 +782,60 @@
     persistSession();
   }
 
-  function applyPreviewWeight(ta, t, fs) {
-    ta.style.fontWeight = '400';
+  function applyPreviewWeight(el, t, fs) {
+    if (!el) return;
+    el.style.fontWeight = '400';
     const boldW = Math.max(0.5, fs * BOLD_RATIO);
     if (t.stroke) {
-      ta.style.webkitTextStroke = Math.max(0.5, t.strokePct * fs) + 'px ' + t.strokeColor;
+      el.style.webkitTextStroke = Math.max(0.5, t.strokePct * fs) + 'px ' + t.strokeColor;
       if (t.bold) {
         const o = Math.max(0.4, fs * 0.035);
-        ta.style.textShadow = `${o}px 0 0 ${t.color},-${o}px 0 0 ${t.color},0 ${o}px 0 ${t.color},0 -${o}px 0 ${t.color}`;
+        el.style.textShadow = `${o}px 0 0 ${t.color},-${o}px 0 0 ${t.color},0 ${o}px 0 ${t.color},0 -${o}px 0 ${t.color}`;
       } else {
-        ta.style.textShadow = 'none';
+        el.style.textShadow = 'none';
       }
     } else if (t.bold) {
-      ta.style.webkitTextStroke = boldW + 'px ' + t.color;
-      ta.style.textShadow = 'none';
+      el.style.webkitTextStroke = boldW + 'px ' + t.color;
+      el.style.textShadow = 'none';
     } else {
-      ta.style.webkitTextStroke = '0px transparent';
-      ta.style.textShadow = 'none';
+      el.style.webkitTextStroke = '0px transparent';
+      el.style.textShadow = 'none';
     }
+  }
+
+  function applyTextSurfaceStyles(el, t, fs, fam, align) {
+    if (!el) return;
+    el.style.fontFamily = fam;
+    el.style.fontSize = fs + 'px';
+    el.style.color = t.color;
+    el.style.textAlign = align;
+    el.style.lineHeight = t.vertical ? '1.15' : String(LH_RATIO);
+    applyPreviewWeight(el, t, fs);
   }
 
   async function syncBox(box, t) {
     const sw = stage.clientWidth, sh = stage.clientHeight;
     const fs = Math.max(6, Math.round(t.fontPct * sh));
     const ta = box.querySelector('textarea');
+    const face = box.querySelector('.text-face');
     const fontFamily = t.fontFamily || State.DEFAULT_FONT;
-    const fam = '"' + fontFamily + '", ' + FONT;
-    ta.style.fontFamily = fam;
-    ta.style.fontSize = fs + 'px';
-    ta.style.color = t.color;
-    applyPreviewWeight(ta, t, fs);
+    const fam = fontRef(fontFamily);
+    const editing = !!(ta && document.activeElement === ta);
+    const align = t.vertical
+      ? 'center'
+      : (State.normalizeAlign ? State.normalizeAlign(t.align) : (t.align || 'center'));
+
     if (t.vertical) {
+      box.classList.add('is-vertical');
+      box.classList.remove('editing');
+      if (face) {
+        face.hidden = true;
+        face.textContent = '';
+        face.classList.remove('is-placeholder');
+      }
+      applyTextSurfaceStyles(ta, t, fs, fam, 'center');
       ta.style.writingMode = 'vertical-lr';
       ta.style.textOrientation = 'upright';
-      ta.style.lineHeight = '1.15';
       const isEmpty = !(t.text && t.text.length);
       const measureText = isEmpty ? TEXT_PLACEHOLDER : t.text;
       const cols = measureText.split('\n');
@@ -821,19 +845,39 @@
       const w = cols.length * colW + TA_PAD_X * 2 + ink;
       const h = Math.ceil(maxLen * fs * 1.15 + TA_PAD_Y * 2);
       box.style.width = w + 'px';
+      box.style.height = h + 'px';
       ta.style.height = h + 'px';
       box.style.left = Math.round(t.x * sw - w / 2) + 'px';
       box.style.top = Math.round(t.y * sh - h / 2) + 'px';
       t.widthPct = w / sw;
+      if (!editing) ta.value = t.text || '';
     } else {
+      box.classList.remove('is-vertical');
+      box.classList.toggle('editing', editing);
+      if (face) face.hidden = false;
+      applyTextSurfaceStyles(ta, t, fs, fam, align);
       ta.style.writingMode = 'horizontal-tb';
-      ta.style.lineHeight = String(LH_RATIO);
+      ta.style.textOrientation = 'mixed';
       await prepareTextFont(fontFamily, fs);
       const { w, h } = layoutHorizontalText(t, fs, fontFamily, sw, sh, measureCtx());
       box.style.width = w + 'px';
+      box.style.height = h + 'px';
       ta.style.height = h + 'px';
       box.style.left = Math.round(t.x * sw - w / 2) + 'px';
       box.style.top = Math.round(t.y * sh - h / 2) + 'px';
+      if (face) {
+        applyTextSurfaceStyles(face, t, fs, fam, align);
+        face.style.height = h + 'px';
+        const isEmpty = !(t.text && t.text.length);
+        if (isEmpty) {
+          face.textContent = TEXT_PLACEHOLDER;
+          face.classList.add('is-placeholder');
+        } else {
+          face.classList.remove('is-placeholder');
+          face.textContent = getHorizontalLines(t).join('\n');
+        }
+      }
+      if (!editing) ta.value = t.text || '';
     }
     applyBoxTransform(box, displayRotation(t));
     syncRotatingClass(box, t);
@@ -853,12 +897,17 @@
       const box = document.createElement('div');
       box.className = 'text-box' + (t.id === State.selectedTextId ? ' selected' : '');
       box.dataset.id = t.id;
+      const face = document.createElement('div');
+      face.className = 'text-face';
+      face.setAttribute('aria-hidden', 'true');
       const ta = document.createElement('textarea');
+      ta.className = 'text-edit';
       ta.rows = 1;
       ta.value = t.text || '';
       ta.spellcheck = false;
       ta.placeholder = TEXT_PLACEHOLDER;
       ta.readOnly = rotateSession.active && rotateSession.textId === t.id;
+      box.appendChild(face);
       box.appendChild(ta);
       stage.appendChild(box);
       await syncBox(box, t);
@@ -875,7 +924,12 @@
           ta.blur();
           return;
         }
+        box.classList.add('editing');
         if (State.isTextMode()) selectBox(t);
+      });
+      ta.addEventListener('blur', () => {
+        box.classList.remove('editing');
+        syncBox(box, t);
       });
       ta.addEventListener('dblclick', e => e.stopPropagation());
       box.addEventListener('pointerdown', e => onBoxPointerDown(e, box, t));
@@ -893,10 +947,10 @@
   function applyResizeBox(box, t, handle, bounds, sw, sh, keepCenterY) {
     const fs = Math.max(6, Math.round(t.fontPct * sh));
     const ta = box.querySelector('textarea');
+    const face = box.querySelector('.text-face');
     const fontFamily = t.fontFamily || State.DEFAULT_FONT;
     const ctx = measureCtx();
-    const famRef = fontFamily ? ('"' + fontFamily + '"') : FONT;
-    ctx.font = fs + 'px ' + famRef;
+    ctx.font = fs + 'px ' + fontRef(fontFamily);
 
     let { left, top, width, height } = bounds;
 
@@ -905,7 +959,7 @@
       t.widthPct = width / sw;
       t.x = (left + width / 2) / sw;
       if (!isHeightFixed(t)) {
-        const contentW = wrapContentWidth(width, fs);
+        const contentW = contentMaxWidth(width);
         height = naturalBoxHeight(t, fs, contentW, ctx);
         top = keepCenterY - height / 2;
         t.heightMode = 'auto';
@@ -928,9 +982,11 @@
     }
 
     box.style.width = width + 'px';
+    box.style.height = height + 'px';
     box.style.left = left + 'px';
     box.style.top = top + 'px';
     if (ta) ta.style.height = height + 'px';
+    if (face) face.style.height = height + 'px';
     t.heightPct = height / sh;
     updateTextHandlePositions(box);
   }
@@ -1083,7 +1139,9 @@
     const t = {
       id: State.uid(), text: '', color: ls.color, fontPct: ls.fontPct,
       x: xPct ?? 0.5, y: yPct ?? 0.5, widthPct: 0.4, widthMode: 'auto', heightMode: 'auto',
-      fontFamily: ls.fontFamily, bold: !!ls.bold, vertical: ls.vertical, stroke: ls.stroke,
+      fontFamily: ls.fontFamily, bold: !!ls.bold, vertical: ls.vertical,
+      align: State.normalizeAlign ? State.normalizeAlign(ls.align) : (ls.align || 'center'),
+      stroke: ls.stroke,
       strokeColor: ls.strokeColor, strokePct: ls.strokePct, rotation: 0
     };
     State.current().texts.push(t);
@@ -1138,19 +1196,26 @@
   }
 
   /**
-   * 按舞台坐标系计算换行（与面板框宽一致），供导出绘制使用，避免原图像素下多断行。
+   * 按舞台坐标系计算换行（预览 .text-face 与导出共用）。
+   * @param {object} t 文字对象
+   * @param {string} [text] 默认 t.text
    */
-  function wrapTextForDisplay(t, text) {
+  function getHorizontalLines(t, text) {
+    const raw = text == null ? (t.text || '') : text;
     const sw = Math.max(1, stage.clientWidth || 1);
     const sh = Math.max(1, stage.clientHeight || 1);
     const fs = Math.max(6, Math.round(t.fontPct * sh));
     const boxW = Math.max(10, (t.widthPct || 0.4) * sw);
-    const maxW = wrapContentWidth(boxW, fs);
-    const fontFamily = t.fontFamily || State.DEFAULT_FONT;
-    const famRef = fontFamily ? ('"' + fontFamily + '"') : FONT;
+    const maxW = contentMaxWidth(boxW);
+    const famRef = fontRef(t.fontFamily || State.DEFAULT_FONT);
     const ctx = measureCtx();
     ctx.font = fs + 'px ' + famRef;
-    return wrapText(text, fs, maxW, ctx);
+    return wrapText(raw, fs, maxW, ctx);
+  }
+
+  /** @deprecated 使用 getHorizontalLines */
+  function wrapTextForDisplay(t, text) {
+    return getHorizontalLines(t, text == null ? t.text : text);
   }
 
   function onPanPointerDown(e) {
@@ -1193,6 +1258,7 @@
     isPanMode, setPanMode, togglePanMode, syncPanUI,
     applyPreviewWeight, syncBox, renderBoxes, onBoxPointerDown,
     selectBox, clearSelection, addText, removeText, wrapText, wrapTextForDisplay,
+    getHorizontalLines, fontRef, contentMaxWidth,
     pushHistory, pushHistoryDebounced, undo, redo,
     textInnerPad, wrapContentWidth, measureInk,
     startRotate, exitRotate, confirmRotate, cancelRotateDraft,

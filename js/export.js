@@ -6,7 +6,6 @@
   const State = App.State;
   const { exportBtn, exportOneBtn } = App.Dom;
   const { makeZip } = App.Zip;
-  const { wrapTextForDisplay } = App.Editor;
   const BOLD_RATIO = 0.05;
 
   function uniqueName(base, used) {
@@ -63,7 +62,7 @@
       seen.add(key);
       fontJobs.push(document.fonts.load(fs + 'px "' + t.fontFamily + '"').catch(() => {}));
     }
-    // 同时按舞台字号预热，供 wrapTextForDisplay 测宽
+    // 同时按舞台字号预热，供 getHorizontalLines 测宽
     const sh = (App.Dom.stage && App.Dom.stage.clientHeight) || img.h;
     for (const t of img.texts) {
       if (!t.fontFamily) continue;
@@ -75,13 +74,18 @@
     }
     await Promise.all(fontJobs);
 
-    ctx.textAlign = 'center';
+    const stageW = Math.max(1, (App.Dom.stage && App.Dom.stage.clientWidth) || img.w);
+    const padX = (App.Editor.TA_PAD_X != null) ? App.Editor.TA_PAD_X : 6;
+
     for (const t of img.texts) {
       if (!t.text || !t.text.trim()) continue;
       const fs = Math.max(6, Math.round(t.fontPct * img.h));
-      const famRef = t.fontFamily ? ('"' + t.fontFamily + '"') : App.Utils.FONT;
+      const famRef = App.Editor.fontRef
+        ? App.Editor.fontRef(t.fontFamily || State.DEFAULT_FONT)
+        : (t.fontFamily ? ('"' + t.fontFamily + '"') : App.Utils.FONT);
       ctx.font = fs + 'px ' + famRef;
       if (t.vertical) {
+        ctx.textAlign = 'center';
         const cellH = Math.round(fs * 1.15);
         const colW = Math.max(10, fs);
         const cols = t.text.split('\n').map(s => [...s]);
@@ -96,17 +100,28 @@
           }
         }
       } else {
-        // 在舞台坐标系换行，与操作面板框宽一致，再按原图像素绘制
-        const lines = wrapTextForDisplay(t, t.text);
-        const lh = fs * 1.25;
+        // 与预览 .text-face 共用 getHorizontalLines
+        const lines = App.Editor.getHorizontalLines
+          ? App.Editor.getHorizontalLines(t)
+          : App.Editor.wrapTextForDisplay(t, t.text);
+        const lh = fs * (App.Editor.LH_RATIO || 1.25);
         const cx = t.x * img.w, cy = t.y * img.h;
         const ang = ((typeof t.rotation === 'number' ? t.rotation : 0) * Math.PI) / 180;
+        const align = State.normalizeAlign ? State.normalizeAlign(t.align) : 'center';
+        const boxW = Math.max(10, (t.widthPct || 0.4) * img.w);
+        // 与 contentMaxWidth(boxW_stage) 同源：内容半宽 = (框宽 - 2*padding) / 2
+        const pad = padX * (img.w / stageW);
+        const half = Math.max(0, (boxW - 2 * pad) / 2);
+        let xDraw = 0;
+        if (align === 'left') xDraw = -half;
+        else if (align === 'right') xDraw = half;
         ctx.save();
         ctx.translate(cx, cy);
         if (ang) ctx.rotate(ang);
+        ctx.textAlign = align;
         ctx.textBaseline = 'middle';
         const y0 = -((lines.length - 1) * lh) / 2;
-        lines.forEach((ln, i) => { if (!ln) return; paintGlyph(ctx, ln, 0, y0 + i * lh, t, fs); });
+        lines.forEach((ln, i) => { if (!ln) return; paintGlyph(ctx, ln, xDraw, y0 + i * lh, t, fs); });
         ctx.restore();
       }
     }
