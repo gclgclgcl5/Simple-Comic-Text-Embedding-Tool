@@ -78,6 +78,13 @@
   }
 
   function stageToImage(clientX, clientY, img) {
+    if (App.Editor && App.Editor.clientToStageNorm) {
+      const n = App.Editor.clientToStageNorm(clientX, clientY);
+      return {
+        x: n.nx * img.w,
+        y: n.ny * img.h
+      };
+    }
     const r = stage.getBoundingClientRect();
     return {
       x: (clientX - r.left) / r.width * img.w,

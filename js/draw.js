@@ -87,12 +87,35 @@
   }
 
   function stageToImage(clientX, clientY, img) {
+    if (App.Editor && App.Editor.clientToStageNorm) {
+      const n = App.Editor.clientToStageNorm(clientX, clientY);
+      return {
+        x: n.nx * img.w,
+        y: n.ny * img.h,
+        nx: n.nx,
+        ny: n.ny
+      };
+    }
     const r = stage.getBoundingClientRect();
     return {
       x: (clientX - r.left) / r.width * img.w,
       y: (clientY - r.top) / r.height * img.h,
       nx: (clientX - r.left) / r.width,
       ny: (clientY - r.top) / r.height
+    };
+  }
+
+  /** 视口 → 舞台布局像素（供命中检测；兼容 CSS scale） */
+  function clientToStageLayoutPx(clientX, clientY) {
+    if (App.Editor && App.Editor.clientToStageLayout) {
+      return App.Editor.clientToStageLayout(clientX, clientY);
+    }
+    const r = stage.getBoundingClientRect();
+    const sw = stage.clientWidth || 1;
+    const sh = stage.clientHeight || 1;
+    return {
+      x: (clientX - r.left) / (r.width || 1) * sw,
+      y: (clientY - r.top) / (r.height || 1) * sh
     };
   }
 
@@ -705,7 +728,8 @@
       return;
     }
     brushCursorHovering = true;
-    brushCursorPos = { x: e.clientX - r.left, y: e.clientY - r.top };
+    const layout = clientToStageLayoutPx(e.clientX, e.clientY);
+    brushCursorPos = { x: layout.x, y: layout.y };
     updateCursor();
   }
 
@@ -884,8 +908,9 @@
     const tool = prefs.tool;
     const p = stageToImage(e.clientX, e.clientY, img);
     const sw = stage.clientWidth, sh = stage.clientHeight;
-    const stageX = e.clientX - stage.getBoundingClientRect().left;
-    const stageY = e.clientY - stage.getBoundingClientRect().top;
+    const layoutPt = clientToStageLayoutPx(e.clientX, e.clientY);
+    const stageX = layoutPt.x;
+    const stageY = layoutPt.y;
 
     if (tool === 'eyedropper') {
       e.preventDefault();

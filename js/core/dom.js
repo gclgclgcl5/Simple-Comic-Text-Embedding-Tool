@@ -22,6 +22,7 @@
     fontUploadBtn: $('fontUploadBtn'),
     fontInput: $('fontInput'),
     canvasArea: $('canvasArea'),
+    stageZoomShell: $('stageZoomShell'),
     stage: $('stage'),
     stageImg: $('stageImg'),
     emptyEditor: $('emptyEditor'),

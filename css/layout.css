@@ -406,6 +406,12 @@ body.gallery-collapsed.props-collapsed .app-main {
     var(--bg);
 }
 
+#stageZoomShell {
+  position: relative;
+  flex: none;
+  margin: auto;
+}
+
 #stage {
   position: relative;
   box-shadow: var(--shadow-stage);
@@ -413,7 +419,8 @@ body.gallery-collapsed.props-collapsed .app-main {
   overflow: visible;
   user-select: none;
   flex: none;
-  margin: auto;
+  margin: 0;
+  transform-origin: 0 0;
 }
 
 #stage img {

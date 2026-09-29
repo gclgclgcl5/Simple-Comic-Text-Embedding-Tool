@@ -4,7 +4,7 @@
 
   const { FONT } = App.Utils;
   const State = App.State;
-  const { canvasArea, stage, stageImg, emptyEditor, currentName, addTextBtn, exportOneBtn, tbDelBtn } = App.Dom;
+  const { canvasArea, stage, stageImg, emptyEditor, currentName, addTextBtn, exportOneBtn, tbDelBtn, stageZoomShell } = App.Dom;
 
   const TA_PAD_X = 6, TA_PAD_Y = 1, LH_RATIO = 1.25;
   /** @deprecated 折行宽已与 padding 对齐，不再使用 slack；保留常量以免外部引用报错 */
@@ -22,6 +22,9 @@
 
   let measureCanvas = null;
   let viewZoom = 1;
+  /** 上次 layout 的 fit 尺寸；仅 fit 变化时重排文字/画布预览 */
+  let lastFitW = 0;
+  let lastFitH = 0;
   let panMode = false;
   let panDrag = null;
   let rotateSession = {
@@ -79,10 +82,12 @@
 
   function positionRotateConfirmUI(box, ui) {
     if (!box || !ui) return;
+    const z = Math.max(0.0001, viewZoom);
     const stageRect = stage.getBoundingClientRect();
     const boxRect = box.getBoundingClientRect();
-    const centerX = (boxRect.left + boxRect.right) / 2 - stageRect.left;
-    const top = boxRect.bottom - stageRect.top + CONFIRM_BTN_GAP;
+    // rect 差值为视觉像素，写回 stage 的 left/top 需布局坐标
+    const centerX = ((boxRect.left + boxRect.right) / 2 - stageRect.left) / z;
+    const top = (boxRect.bottom - stageRect.top) / z + CONFIRM_BTN_GAP;
     ui.style.left = Math.round(centerX - CONFIRM_PAIR_WIDTH / 2) + 'px';
     ui.style.top = Math.round(top) + 'px';
   }
@@ -251,23 +256,20 @@
     e.preventDefault();
     e.stopPropagation();
     clearRotateConfirmUI();
-    const stageRect = stage.getBoundingClientRect();
     const cx = t.x * stage.clientWidth;
     const cy = t.y * stage.clientHeight;
-    const sx0 = e.clientX - stageRect.left;
-    const sy0 = e.clientY - stageRect.top;
-    const startPointerAngle = Math.atan2(sy0 - cy, sx0 - cx);
+    const p0 = clientToStageLayout(e.clientX, e.clientY);
+    const startPointerAngle = Math.atan2(p0.y - cy, p0.x - cx);
     const startDraft = rotateSession.draft;
     let moved = false;
 
     const move = ev => {
-      const sx = ev.clientX - stageRect.left;
-      const sy = ev.clientY - stageRect.top;
+      const p = clientToStageLayout(ev.clientX, ev.clientY);
       if (!moved && Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) > 2) {
         moved = true;
         box.classList.add('dragging');
       }
-      const ang = Math.atan2(sy - cy, sx - cx);
+      const ang = Math.atan2(p.y - cy, p.x - cx);
       let deltaDeg = (ang - startPointerAngle) * 180 / Math.PI;
       rotateSession.draft = normalizeRotation(startDraft + deltaDeg);
       applyBoxTransform(box, rotateSession.draft);
@@ -572,6 +574,37 @@
 
   function stageH() { return stage.clientHeight || 400; }
 
+  function stageLayoutSize() {
+    return {
+      w: Math.max(1, stage.clientWidth || 1),
+      h: Math.max(1, stage.clientHeight || 1)
+    };
+  }
+
+  /** 视口坐标 → 舞台归一化（用 getBoundingClientRect，兼容 CSS scale） */
+  function clientToStageNorm(clientX, clientY) {
+    const r = stage.getBoundingClientRect();
+    const rw = r.width || 1;
+    const rh = r.height || 1;
+    return {
+      nx: (clientX - r.left) / rw,
+      ny: (clientY - r.top) / rh
+    };
+  }
+
+  /** 视口坐标 → 舞台布局像素 + 归一化 */
+  function clientToStageLayout(clientX, clientY) {
+    const n = clientToStageNorm(clientX, clientY);
+    const { w, h } = stageLayoutSize();
+    return { x: n.nx * w, y: n.ny * h, nx: n.nx, ny: n.ny };
+  }
+
+  function setStageVisible(on) {
+    const show = !!on;
+    stage.hidden = !show;
+    if (stageZoomShell) stageZoomShell.hidden = !show;
+  }
+
   function scheduleEdit() {
     if (State.currentId && App.Storage && App.Storage.isAvailable()) {
       App.Storage.scheduleSaveEdit(State.currentId);
@@ -679,14 +712,28 @@
   }
 
   function layoutStage() {
-    if (!State.current()) return;
+    if (!State.current()) return { fitChanged: false };
     const { fitW, fitH } = computeFitSize();
-    const w = fitW * viewZoom;
-    const h = fitH * viewZoom;
-    stage.style.width = w + 'px';
-    stage.style.height = h + 'px';
+    stage.style.width = fitW + 'px';
+    stage.style.height = fitH + 'px';
+    if (viewZoom === 1) {
+      stage.style.transform = 'none';
+    } else {
+      stage.style.transform = 'scale(' + viewZoom + ')';
+    }
+    if (stageZoomShell) {
+      stageZoomShell.style.width = (fitW * viewZoom) + 'px';
+      stageZoomShell.style.height = (fitH * viewZoom) + 'px';
+    }
     syncZoomUI();
-    if (App.Draw) App.Draw.onStageResize();
+
+    const fitChanged = Math.abs(fitW - lastFitW) > 0.5 || Math.abs(fitH - lastFitH) > 0.5;
+    lastFitW = fitW;
+    lastFitH = fitH;
+    if (fitChanged) {
+      if (App.Draw) App.Draw.onStageResize();
+    }
+    return { fitChanged };
   }
 
   /**
@@ -716,13 +763,14 @@
     const relY = (ay - before.top) / bh;
 
     viewZoom = z;
-    layoutStage();
+    const { fitChanged } = layoutStage();
 
     const after = stage.getBoundingClientRect();
     canvasArea.scrollLeft += (after.left + relX * after.width) - ax;
     canvasArea.scrollTop += (after.top + relY * after.height) - ay;
 
-    renderBoxes();
+    // 纯缩放不重排文字；fit 变了才重排
+    if (fitChanged) renderBoxes();
   }
 
   function zoomByStep(dir, anchor) {
@@ -742,12 +790,12 @@
     setPanMode(false);
     viewZoom = 1;
     if (State.current()) {
-      layoutStage();
+      const { fitChanged } = layoutStage();
       if (canvasArea) {
         canvasArea.scrollLeft = 0;
         canvasArea.scrollTop = 0;
       }
-      renderBoxes();
+      if (fitChanged) renderBoxes();
     } else {
       syncZoomUI();
     }
@@ -763,8 +811,10 @@
     State.currentId = id;
     State.selectedTextId = null;
     viewZoom = 1;
+    lastFitW = 0;
+    lastFitH = 0;
     stageImg.src = img.url;
-    stage.hidden = false;
+    setStageVisible(true);
     emptyEditor.hidden = true;
     currentName.textContent = img.name;
     addTextBtn.disabled = false;
@@ -999,10 +1049,12 @@
     const ta = box.querySelector('textarea');
     const startX = e.clientX, startY = e.clientY;
     const origLeft = parseFloat(box.style.left), origTop = parseFloat(box.style.top);
+    const z = Math.max(0.0001, viewZoom);
     let moved = false;
     const move = ev => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
-      if (!moved && Math.abs(dx) + Math.abs(dy) > 3) {
+      const dx = (ev.clientX - startX) / z;
+      const dy = (ev.clientY - startY) / z;
+      if (!moved && Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) > 3) {
         moved = true;
         if (ta) ta.blur();
       }
@@ -1045,7 +1097,6 @@
 
     selectBox(t);
 
-    const stageRect = stage.getBoundingClientRect();
     const sw = stage.clientWidth, sh = stage.clientHeight;
     const handle = e.target.closest('.text-handle')?.dataset.handle;
 
@@ -1069,12 +1120,11 @@
       let moved = false;
 
       const move = ev => {
-        const sx = ev.clientX - stageRect.left;
-        const sy = ev.clientY - stageRect.top;
+        const p = clientToStageLayout(ev.clientX, ev.clientY);
         if (!moved && Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) > 3) moved = true;
         if (moved) {
           box.classList.add('dragging');
-          const bounds = computeResizeBounds(handle, orig, sx, sy, minH);
+          const bounds = computeResizeBounds(handle, orig, p.x, p.y, minH);
           applyResizeBox(box, t, handle, bounds, sw, sh, keepCenterY);
         }
       };
@@ -1255,6 +1305,7 @@
   App.Editor = {
     selectImage, layoutStage, stageH, syncPropsUI,
     getZoom, setZoom, zoomByStep, zoomAt, resetZoom, syncZoomUI,
+    clientToStageNorm, clientToStageLayout, stageLayoutSize, setStageVisible,
     isPanMode, setPanMode, togglePanMode, syncPanUI,
     applyPreviewWeight, syncBox, renderBoxes, onBoxPointerDown,
     selectBox, clearSelection, addText, removeText, wrapText, wrapTextForDisplay,

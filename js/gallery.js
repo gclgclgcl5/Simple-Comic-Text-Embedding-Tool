@@ -431,7 +431,11 @@
     if (!removedCurrent) return;
     State.currentId = null;
     State.selectedTextId = null;
-    stage.hidden = true;
+    if (App.Editor && App.Editor.setStageVisible) App.Editor.setStageVisible(false);
+    else {
+      stage.hidden = true;
+      if (App.Dom.stageZoomShell) App.Dom.stageZoomShell.hidden = true;
+    }
     emptyEditor.hidden = false;
     currentName.textContent = '未选择图片';
     addTextBtn.disabled = true;
@@ -484,7 +488,11 @@
     State.currentProjectId = null;
     State.currentId = null;
     State.selectedTextId = null;
-    stage.hidden = true;
+    if (App.Editor && App.Editor.setStageVisible) App.Editor.setStageVisible(false);
+    else {
+      stage.hidden = true;
+      if (App.Dom.stageZoomShell) App.Dom.stageZoomShell.hidden = true;
+    }
     emptyEditor.hidden = false;
     currentName.textContent = '未选择图片';
     addTextBtn.disabled = true;
