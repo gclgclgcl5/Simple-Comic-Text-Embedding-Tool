@@ -9,11 +9,29 @@
   const HISTORY_MAX = 50;
   /** 落盘 undo 步数（小于内存 HISTORY_MAX） */
   const DISK_UNDO_MAX = 8;
+  const FULL_HISTORY_CAP_MP = 8; // 超过约 8MP 时限制 full 快照数量
+  const FULL_HISTORY_MAX_HD = 15;
 
   function persistDraw() {
     const img = State.current();
     if (img && App.Storage && App.Storage.isAvailable()) {
       App.Storage.scheduleSaveEdit(img.id);
+      if (App.Storage.scheduleSaveDrawHistory) {
+        App.Storage.scheduleSaveDrawHistory(img.id);
+      }
+    }
+  }
+
+  function flushDrawHistoryNow(imageId) {
+    if (!App.Storage || !App.Storage.isAvailable()) return;
+    const id = imageId || (State.current() && State.current().id);
+    if (!id) return;
+    if (App.Storage.flushPendingForImage) {
+      App.Storage.flushPendingForImage(id);
+    } else if (App.Storage.flushSaveDrawHistory) {
+      App.Storage.flushSaveDrawHistory(id).catch(() => {});
+    } else if (App.Storage.scheduleSaveDrawHistory) {
+      App.Storage.scheduleSaveDrawHistory(id);
     }
   }
 
@@ -26,9 +44,30 @@
   let brushCursorPos = null;
   let brushCursorHovering = false;
 
+  /** 笔画备份 canvas（drawImage，避免 pointerdown 整图 getImageData） */
+  let strokeBackup = null;
+  /** @type {{ x0: number, y0: number, x1: number, y1: number } | null} */
+  let strokeDirty = null;
+  let previewRaf = 0;
+  let previewPendingImg = null;
+  let lastSelectedImageId = null;
+
   function ensureDraw(img) {
     if (!img.draw) img.draw = App.Gallery.createDrawState();
+    if (typeof img.draw.hasRasterInk !== 'boolean') img.draw.hasRasterInk = false;
     return img.draw;
+  }
+
+  function markRasterInk(img) {
+    ensureDraw(img).hasRasterInk = true;
+  }
+
+  function drawHasInk(img) {
+    if (!img || !img.draw) return false;
+    const d = img.draw;
+    if (d.hasRasterInk) return true;
+    if (d.shapes && d.shapes.length) return true;
+    return false;
   }
 
   function ensureRaster(img) {
@@ -59,6 +98,10 @@
 
   function scaleFactor(img) { return img.w / Math.max(1, stage.clientWidth); }
 
+  function cloneShapes(d) {
+    return JSON.parse(JSON.stringify((d && d.shapes) || []));
+  }
+
   function saveSnapshot(img) {
     const d = ensureDraw(img);
     const canvas = d.rasterCanvas;
@@ -67,34 +110,156 @@
       const ctx = canvas.getContext('2d');
       raster = ctx.getImageData(0, 0, img.w, img.h);
     }
-    return { raster, shapes: JSON.parse(JSON.stringify(d.shapes)) };
+    return { kind: 'full', raster, shapes: cloneShapes(d) };
+  }
+
+  function ensureStrokeBackup(img) {
+    const src = ensureRaster(img);
+    if (!strokeBackup || strokeBackup.width !== img.w || strokeBackup.height !== img.h) {
+      strokeBackup = document.createElement('canvas');
+      strokeBackup.width = img.w;
+      strokeBackup.height = img.h;
+    }
+    strokeBackup.getContext('2d').drawImage(src, 0, 0);
+    return strokeBackup;
+  }
+
+  function expandStrokeDirty(cx, cy, radius) {
+    const pad = Math.ceil(radius) + 2;
+    const x0 = Math.floor(cx - pad);
+    const y0 = Math.floor(cy - pad);
+    const x1 = Math.ceil(cx + pad);
+    const y1 = Math.ceil(cy + pad);
+    if (!strokeDirty) {
+      strokeDirty = { x0, y0, x1, y1 };
+      return;
+    }
+    strokeDirty.x0 = Math.min(strokeDirty.x0, x0);
+    strokeDirty.y0 = Math.min(strokeDirty.y0, y0);
+    strokeDirty.x1 = Math.max(strokeDirty.x1, x1);
+    strokeDirty.y1 = Math.max(strokeDirty.y1, y1);
+  }
+
+  function clampDirtyBox(img) {
+    if (!strokeDirty) return null;
+    const x0 = Math.max(0, Math.min(img.w, Math.floor(strokeDirty.x0)));
+    const y0 = Math.max(0, Math.min(img.h, Math.floor(strokeDirty.y0)));
+    const x1 = Math.max(0, Math.min(img.w, Math.ceil(strokeDirty.x1)));
+    const y1 = Math.max(0, Math.min(img.h, Math.ceil(strokeDirty.y1)));
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w < 1 || h < 1) return null;
+    return { x: x0, y: y0, w, h };
+  }
+
+  function finishStrokePatch(img, shapesBefore) {
+    if (!strokeBackup) {
+      strokeDirty = null;
+      return null;
+    }
+    const box = clampDirtyBox(img);
+    strokeDirty = null;
+    let snap = null;
+    if (box) {
+      try {
+        const raster = strokeBackup.getContext('2d').getImageData(box.x, box.y, box.w, box.h);
+        snap = {
+          kind: 'patch',
+          x: box.x, y: box.y, w: box.w, h: box.h,
+          raster,
+          shapes: shapesBefore
+        };
+      } catch (e) {
+        console.warn('stroke patch snapshot failed, fallback full', e);
+        try {
+          const raster = strokeBackup.getContext('2d').getImageData(0, 0, img.w, img.h);
+          snap = { kind: 'full', raster, shapes: shapesBefore };
+        } catch (e2) {
+          console.warn('stroke full fallback failed', e2);
+          snap = null;
+        }
+      }
+    }
+    strokeBackup = null;
+    return snap;
+  }
+
+  function snapshotPatchRegion(img, x, y, w, h, shapes) {
+    const canvas = ensureRaster(img);
+    const ctx = canvas.getContext('2d');
+    const x0 = Math.max(0, Math.min(img.w, Math.floor(x)));
+    const y0 = Math.max(0, Math.min(img.h, Math.floor(y)));
+    const x1 = Math.max(0, Math.min(img.w, Math.ceil(x + w)));
+    const y1 = Math.max(0, Math.min(img.h, Math.ceil(y + h)));
+    const pw = x1 - x0;
+    const ph = y1 - y0;
+    if (pw < 1 || ph < 1) {
+      return { kind: 'patch', x: x0, y: y0, w: 0, h: 0, raster: null, shapes: shapes || cloneShapes(ensureDraw(img)) };
+    }
+    return {
+      kind: 'patch',
+      x: x0, y: y0, w: pw, h: ph,
+      raster: ctx.getImageData(x0, y0, pw, ph),
+      shapes: shapes || cloneShapes(ensureDraw(img))
+    };
   }
 
   function restoreSnapshot(img, snap) {
     const d = ensureDraw(img);
     const canvas = ensureRaster(img);
     const ctx = canvas.getContext('2d');
-    if (snap.raster) ctx.putImageData(snap.raster, 0, 0);
-    else ctx.clearRect(0, 0, img.w, img.h);
-    d.shapes = JSON.parse(JSON.stringify(snap.shapes));
-    syncDrawPreview(img);
+    if (!snap) {
+      ctx.clearRect(0, 0, img.w, img.h);
+      d.shapes = [];
+      d.hasRasterInk = false;
+    } else if (snap.kind === 'patch') {
+      if (snap.raster && snap.w > 0 && snap.h > 0) {
+        ctx.putImageData(snap.raster, snap.x, snap.y);
+      }
+      d.shapes = JSON.parse(JSON.stringify(snap.shapes || []));
+      if (snap.raster) d.hasRasterInk = true;
+    } else if (snap.raster) {
+      ctx.putImageData(snap.raster, 0, 0);
+      d.shapes = JSON.parse(JSON.stringify(snap.shapes || []));
+      d.hasRasterInk = true;
+    } else {
+      ctx.clearRect(0, 0, img.w, img.h);
+      d.shapes = JSON.parse(JSON.stringify(snap.shapes || []));
+      d.hasRasterInk = false;
+    }
+    syncDrawPreview(img, true);
+  }
+
+  function countFullUndos(d) {
+    return (d.history.undo || []).filter(s => s && s.kind !== 'patch').length;
   }
 
   function pushHistory(img, before) {
+    if (!before) return;
     const d = ensureDraw(img);
     d.history.undo.push(before);
     d.history.redo = [];
-    if (d.history.undo.length > HISTORY_MAX) d.history.undo.shift();
+    while (d.history.undo.length > HISTORY_MAX) d.history.undo.shift();
+    const mp = (img.w * img.h) / 1e6;
+    if (mp > FULL_HISTORY_CAP_MP) {
+      while (countFullUndos(d) > FULL_HISTORY_MAX_HD) {
+        const idx = d.history.undo.findIndex(s => s && s.kind !== 'patch');
+        if (idx < 0) break;
+        d.history.undo.splice(idx, 1);
+      }
+    }
     App.DrawToolbar.updateHistoryButtons();
   }
 
-  async function imageDataToBlob(imageData) {
+  async function imageDataToBlob(imageData, opts) {
     if (!imageData || !imageData.width || !imageData.height) return null;
     const canvas = document.createElement('canvas');
     canvas.width = imageData.width;
     canvas.height = imageData.height;
     canvas.getContext('2d').putImageData(imageData, 0, 0);
-    if (App.Storage && App.Storage.canvasHasInk && !App.Storage.canvasHasInk(canvas)) return null;
+    if (!(opts && opts.skipInkCheck)) {
+      if (App.Storage && App.Storage.canvasHasInk && !App.Storage.canvasHasInk(canvas)) return null;
+    }
     if (!App.Storage || !App.Storage.canvasToBlob) return null;
     return App.Storage.canvasToBlob(canvas);
   }
@@ -108,14 +273,14 @@
       await App.Storage.restoreRaster(canvas, blob);
     } else {
       await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          canvas.getContext('2d').drawImage(img, 0, 0);
-          URL.revokeObjectURL(img.src);
+        const im = new Image();
+        im.onload = () => {
+          canvas.getContext('2d').drawImage(im, 0, 0);
+          URL.revokeObjectURL(im.src);
           resolve();
         };
-        img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('blobToImageData failed')); };
-        img.src = URL.createObjectURL(blob);
+        im.onerror = () => { URL.revokeObjectURL(im.src); reject(new Error('blobToImageData failed')); };
+        im.src = URL.createObjectURL(blob);
       });
     }
     return canvas.getContext('2d').getImageData(0, 0, w, h);
@@ -123,7 +288,7 @@
 
   /**
    * 将内存 undo 尾部序列化为可写入 IndexedDB 的结构（不含 redo）。
-   * @returns {Promise<{ undo: Array<{ shapes: any[], rasterBlob: Blob|null }> }>}
+   * patch 项带 patch:{x,y,w,h}；旧 full 无 patch 字段。
    */
   async function serializeUndoForDisk(img) {
     const d = ensureDraw(img);
@@ -134,25 +299,25 @@
       const snap = slice[i] || {};
       const shapes = JSON.parse(JSON.stringify(snap.shapes || []));
       let rasterBlob = null;
+      let patch = null;
       if (snap.raster) {
         try {
-          rasterBlob = await imageDataToBlob(snap.raster);
+          // undo 快照本身即墨迹来源，跳过整图/大图 ink 扫描
+          rasterBlob = await imageDataToBlob(snap.raster, { skipInkCheck: true });
         } catch (e) {
           console.warn('serialize draw undo raster', e);
           rasterBlob = null;
         }
       }
-      out.push({ shapes, rasterBlob });
+      if (snap.kind === 'patch') {
+        patch = { x: snap.x|0, y: snap.y|0, w: snap.w|0, h: snap.h|0 };
+      }
+      out.push({ shapes, rasterBlob, patch });
       await new Promise(r => setTimeout(r, 0));
     }
     return { undo: out };
   }
 
-  /**
-   * 从磁盘条目恢复内存 undo；redo 清空。
-   * @param {any} img
-   * @param {Array<{ shapes?: any[], rasterBlob?: Blob|null }>|null} entries
-   */
   async function hydrateUndoFromDisk(img, entries) {
     const d = ensureDraw(img);
     d.history.redo = [];
@@ -163,19 +328,32 @@
     }
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i] || {};
-      let raster = null;
-      if (entry.rasterBlob) {
+      const shapes = JSON.parse(JSON.stringify(entry.shapes || []));
+      const p = entry.patch;
+      if (p && typeof p.w === 'number' && typeof p.h === 'number' && p.w > 0 && p.h > 0 && entry.rasterBlob) {
+        let raster = null;
         try {
-          raster = await blobToImageData(entry.rasterBlob, img.w, img.h);
+          raster = await blobToImageData(entry.rasterBlob, p.w, p.h);
         } catch (e) {
-          console.warn('hydrate draw undo raster', e);
-          raster = null;
+          console.warn('hydrate draw undo patch', e);
         }
+        d.history.undo.push({
+          kind: 'patch',
+          x: p.x|0, y: p.y|0, w: p.w|0, h: p.h|0,
+          raster,
+          shapes
+        });
+      } else {
+        let raster = null;
+        if (entry.rasterBlob) {
+          try {
+            raster = await blobToImageData(entry.rasterBlob, img.w, img.h);
+          } catch (e) {
+            console.warn('hydrate draw undo raster', e);
+          }
+        }
+        d.history.undo.push({ kind: 'full', raster, shapes });
       }
-      d.history.undo.push({
-        raster,
-        shapes: JSON.parse(JSON.stringify(entry.shapes || []))
-      });
     }
     if (App.DrawToolbar && App.DrawToolbar.updateHistoryButtons) App.DrawToolbar.updateHistoryButtons();
   }
@@ -183,8 +361,14 @@
   function undo(img) {
     const d = ensureDraw(img);
     if (!d.history.undo.length) return;
-    const cur = saveSnapshot(img);
-    const prev = d.history.undo.pop();
+    const prev = d.history.undo[d.history.undo.length - 1];
+    let cur;
+    if (prev && prev.kind === 'patch' && prev.w > 0 && prev.h > 0) {
+      cur = snapshotPatchRegion(img, prev.x, prev.y, prev.w, prev.h, d.shapes);
+    } else {
+      cur = saveSnapshot(img);
+    }
+    d.history.undo.pop();
     d.history.redo.push(cur);
     restoreSnapshot(img, prev);
     App.DrawToolbar.updateHistoryButtons();
@@ -195,8 +379,14 @@
   function redo(img) {
     const d = ensureDraw(img);
     if (!d.history.redo.length) return;
-    const cur = saveSnapshot(img);
-    const next = d.history.redo.pop();
+    const next = d.history.redo[d.history.redo.length - 1];
+    let cur;
+    if (next && next.kind === 'patch' && next.w > 0 && next.h > 0) {
+      cur = snapshotPatchRegion(img, next.x, next.y, next.w, next.h, d.shapes);
+    } else {
+      cur = saveSnapshot(img);
+    }
+    d.history.redo.pop();
     d.history.undo.push(cur);
     restoreSnapshot(img, next);
     App.DrawToolbar.updateHistoryButtons();
@@ -223,20 +413,24 @@
     const ctx = ensureRaster(img).getContext('2d');
     d.shapes.forEach(s => bakeShapeToRaster(ctx, s, img));
     d.shapes = [];
+    markRasterInk(img);
   }
 
   function bakeIntersectingShapes(img, ix, iy, radius) {
     const d = ensureDraw(img);
     const ctx = ensureRaster(img).getContext('2d');
     const remaining = [];
+    let baked = false;
     for (const s of d.shapes) {
       if (shapeIntersectsCircle(s, img, ix, iy, radius)) {
         bakeShapeToRaster(ctx, s, img);
+        baked = true;
       } else {
         remaining.push(s);
       }
     }
     d.shapes = remaining;
+    if (baked) markRasterInk(img);
   }
 
   function shapeIntersectsCircle(s, img, ix, iy, radius) {
@@ -365,7 +559,28 @@
     if (App.DrawToolbar) App.DrawToolbar.updateDeleteButton();
   }
 
-  function syncDrawPreview(img) {
+  function syncDrawPreview(img, immediate) {
+    if (!img) return;
+    if (immediate) {
+      if (previewRaf) {
+        cancelAnimationFrame(previewRaf);
+        previewRaf = 0;
+      }
+      previewPendingImg = null;
+      doSyncDrawPreview(img);
+      return;
+    }
+    previewPendingImg = img;
+    if (previewRaf) return;
+    previewRaf = requestAnimationFrame(() => {
+      previewRaf = 0;
+      const next = previewPendingImg;
+      previewPendingImg = null;
+      if (next) doSyncDrawPreview(next);
+    });
+  }
+
+  function doSyncDrawPreview(img) {
     if (!img) return;
     const d = ensureDraw(img);
     const sw = stage.clientWidth, sh = stage.clientHeight;
@@ -584,6 +799,7 @@
       const patch = rctx.getImageData(rx, ry, roiW, roiH);
       App.SmartFill.paintMaskIntoImageData(patch, bubble.mask, color);
       rctx.putImageData(patch, rx, ry);
+      markRasterInk(img);
       return true;
     }
 
@@ -596,6 +812,7 @@
     const color = App.SmartFill.sampleRingColor(imageData, roiW, roiH, cover, cover.threshold);
     rctx.fillStyle = color;
     rctx.fillRect(rx + cover.x, ry + cover.y, cover.w, cover.h);
+    markRasterInk(img);
     return true;
   }
 
@@ -604,24 +821,32 @@
   }
 
   function onImageSelected(img) {
+    if (lastSelectedImageId && lastSelectedImageId !== (img && img.id)) {
+      flushDrawHistoryNow(lastSelectedImageId);
+    }
+    lastSelectedImageId = img ? img.id : null;
     if (!img) return;
     ensureDraw(img);
     deselectShape();
-    syncDrawPreview(img);
+    syncDrawPreview(img, true);
     App.DrawToolbar.updateHistoryButtons();
     App.DrawToolbar.syncUIFromPrefs(img);
   }
 
   function onStageResize() {
     const img = State.current();
-    if (img) syncDrawPreview(img);
+    if (img) syncDrawPreview(img, true);
   }
 
   function onModeChange() {
-    if (State.isTextMode()) deselectShape();
+    if (State.isTextMode()) {
+      deselectShape();
+      const img = State.current();
+      if (img) flushDrawHistoryNow(img.id);
+    }
     updatePointerEvents();
     const img = State.current();
-    if (img) syncDrawPreview(img);
+    if (img) syncDrawPreview(img, true);
   }
 
   function drawBrushDot(ctx, x, y, size, erase) {
@@ -684,12 +909,16 @@
 
     if (tool === 'brush' || tool === 'eraser') {
       e.preventDefault();
-      const before = saveSnapshot(img);
-      pointer = { type: tool, before, lastX: p.x, lastY: p.y };
+      const shapesBefore = cloneShapes(d);
+      ensureStrokeBackup(img);
+      strokeDirty = null;
+      pointer = { type: tool, shapesBefore, lastX: p.x, lastY: p.y };
       const ctx = ensureRaster(img).getContext('2d');
       const size = (tool === 'eraser' ? prefs.eraserSize : prefs.brushSize) * scaleFactor(img);
+      expandStrokeDirty(p.x, p.y, size / 2);
       if (tool === 'eraser') bakeIntersectingShapes(img, p.x, p.y, size / 2);
       drawBrushDot(ctx, p.x, p.y, size, tool === 'eraser');
+      markRasterInk(img);
       syncDrawPreview(img);
       return;
     }
@@ -737,10 +966,13 @@
       const ctx = ensureRaster(img).getContext('2d');
       const prefs = State.drawPrefs;
       const size = (pointer.type === 'eraser' ? prefs.eraserSize : prefs.brushSize) * scaleFactor(img);
+      expandStrokeDirty(p.x, p.y, size / 2);
+      expandStrokeDirty(pointer.lastX, pointer.lastY, size / 2);
       if (pointer.type === 'eraser') bakeIntersectingShapes(img, p.x, p.y, size / 2);
       drawBrushLine(ctx, pointer.lastX, pointer.lastY, p.x, p.y, size, pointer.type === 'eraser');
       pointer.lastX = p.x;
       pointer.lastY = p.y;
+      markRasterInk(img);
       syncDrawPreview(img);
       return;
     }
@@ -795,7 +1027,9 @@
     const d = ensureDraw(img);
 
     if (pointer.type === 'brush' || pointer.type === 'eraser') {
-      pushHistory(img, pointer.before);
+      const before = finishStrokePatch(img, pointer.shapesBefore);
+      if (before) pushHistory(img, before);
+      syncDrawPreview(img, true);
       pointer = null;
       persistDraw();
       return;
@@ -814,7 +1048,7 @@
         applied = applySmartFill(img, norm, pointer.mode || 'rect');
       }
       if (applied && pointer.before) pushHistory(img, pointer.before);
-      syncDrawPreview(img);
+      syncDrawPreview(img, true);
       pointer = null;
       if (applied) persistDraw();
       return;
@@ -834,7 +1068,7 @@
         if (pointer.before) pushHistory(img, pointer.before);
       }
       previewShape = null;
-      syncDrawPreview(img);
+      syncDrawPreview(img, true);
       pointer = null;
       persistDraw();
       return;
@@ -845,6 +1079,7 @@
       const changed = s && (s.x !== pointer.shapeStart.x || s.y !== pointer.shapeStart.y || s.w !== pointer.shapeStart.w || s.h !== pointer.shapeStart.h);
       if (changed && pointer.before) pushHistory(img, pointer.before);
       pointer = null;
+      syncDrawPreview(img, true);
       if (changed) persistDraw();
       return;
     }
@@ -905,6 +1140,7 @@
     onImageSelected, onStageResize, onModeChange, bindPointerEvents,
     undo, redo, setTool, applyDrawColor, saveSnapshot, renderToExport, updatePointerEvents, updateCursor,
     refreshBrushCursorSize, updateBrushCursor,
-    serializeUndoForDisk, hydrateUndoFromDisk, DISK_UNDO_MAX
+    serializeUndoForDisk, hydrateUndoFromDisk, DISK_UNDO_MAX,
+    drawHasInk, markRasterInk
   };
 })(window.App = window.App || {});

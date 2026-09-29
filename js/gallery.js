@@ -18,6 +18,7 @@
       selectedShapeId: null,
       shapes: [],
       rasterCanvas: null,
+      hasRasterInk: false,
       history: { undo: [], redo: [] }
     };
   }

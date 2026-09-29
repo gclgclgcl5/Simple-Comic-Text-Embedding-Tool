@@ -172,7 +172,7 @@
           if (App.Storage.snapshotEdit) {
             const snap = App.Storage.snapshotEdit(img);
             let rasterBlob = null;
-            if (img.draw.rasterCanvas && App.Storage.canvasHasInk && App.Storage.canvasHasInk(img.draw.rasterCanvas)) {
+            if (img.draw.rasterCanvas && App.Storage.canvasHasInk && App.Storage.canvasHasInk(img.draw.rasterCanvas, img)) {
               rasterBlob = await App.Storage.canvasToBlob(img.draw.rasterCanvas);
             }
             await App.Storage.saveEdit(img.id, { ...snap, rasterBlob, drawHistory: null });

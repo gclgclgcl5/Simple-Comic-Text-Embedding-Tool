@@ -72,7 +72,7 @@
 
   async function buildRasterBlob(img) {
     if (!img.draw || !img.draw.rasterCanvas) return null;
-    if (!App.Storage.canvasHasInk(img.draw.rasterCanvas)) return null;
+    if (!App.Storage.canvasHasInk(img.draw.rasterCanvas, img)) return null;
     return App.Storage.canvasToBlob(img.draw.rasterCanvas);
   }
 
@@ -137,7 +137,11 @@
                 rasterRef = 'edits/' + id + '-hist-' + hi + '.png';
                 parts.push({ name: rasterRef, blob: step.rasterBlob });
               }
-              undoMeta.push({ shapes, raster: rasterRef });
+              undoMeta.push({
+                shapes,
+                raster: rasterRef,
+                patch: step.patch || null
+              });
             }
             editPayload.drawHistory = { undo: undoMeta };
           }
@@ -329,6 +333,7 @@
             const rBlob = await entryToBlob(rEn, 'image/png');
             const canvas = App.Draw.ensureRaster(img);
             await App.Storage.restoreRaster(canvas, rBlob);
+            img.draw.hasRasterInk = true;
           } catch (e) {
             console.warn('raster restore', meta.raster, e);
           }
@@ -352,7 +357,8 @@
           }
           histEntries.push({
             shapes: JSON.parse(JSON.stringify(step.shapes || [])),
-            rasterBlob: rasterBlobStep
+            rasterBlob: rasterBlobStep,
+            patch: step.patch || null
           });
         }
         try {
@@ -367,7 +373,7 @@
         await App.Storage.saveImageMeta(img);
         const snap = App.Storage.snapshotEdit(img);
         let rasterBlob = null;
-        if (img.draw.rasterCanvas && App.Storage.canvasHasInk(img.draw.rasterCanvas)) {
+        if (img.draw.rasterCanvas && App.Storage.canvasHasInk(img.draw.rasterCanvas, img)) {
           rasterBlob = await App.Storage.canvasToBlob(img.draw.rasterCanvas);
         }
         let drawHistory = null;

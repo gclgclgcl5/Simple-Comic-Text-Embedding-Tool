@@ -5,7 +5,10 @@
   const DB_NAME = 'image-text-tool';
   const DB_VERSION = 1;
   const SESSION_KEY = 'main';
-  const DEBOUNCE_MS = 400;
+  /** 轻量落盘（shapes + 当前 raster），不含 undo 历史 */
+  const EDIT_DEBOUNCE_MS = 1200;
+  /** 撤销历史落盘：闲置约 5s */
+  const HISTORY_DEBOUNCE_MS = 5000;
   const WARN_RATIO = 0.8;
   const QUOTA_WARN_SESSION_KEY = 'dsh_quota_warn_shown_v1';
   const FORCE_NOTIFY_COOLDOWN_MS = 2500;
@@ -14,7 +17,24 @@
   let available = false;
   let restoring = false;
   const editTimers = new Map();
+  const historyTimers = new Map();
+  /** 同一 imageId 的写盘串行，避免轻量/历史并行互相覆盖 */
+  const saveChains = new Map();
   let lastForceNotifyAt = 0;
+
+  function enqueueEditWrite(imageId, fn) {
+    const prev = saveChains.get(imageId) || Promise.resolve();
+    const next = prev.then(() => fn()).catch(e => {
+      if (e && e.name === 'QuotaExceededError') return;
+      throw e;
+    });
+    saveChains.set(imageId, next.then(() => {
+      if (saveChains.get(imageId) === next) saveChains.delete(imageId);
+    }, () => {
+      if (saveChains.get(imageId) === next) saveChains.delete(imageId);
+    }));
+    return next;
+  }
 
   function reqToPromise(req) {
     return new Promise((resolve, reject) => {
@@ -180,7 +200,8 @@
     });
   }
 
-  function canvasHasInk(canvas) {
+  /** 整图 getImageData 探测（仅小图或无标志时使用） */
+  function canvasHasInkScan(canvas) {
     if (!canvas || !canvas.width || !canvas.height) return false;
     try {
       const ctx = canvas.getContext('2d');
@@ -190,6 +211,25 @@
       }
     } catch (e) {}
     return false;
+  }
+
+  /**
+   * 是否有栅格墨迹。有 img.draw.hasRasterInk 时直接用标志，避免高清整图 getImageData。
+   * 无标志时：小图可扫描；大图（>2MP）默认 false，由调用方依赖标志。
+   */
+  function canvasHasInk(canvas, img) {
+    if (!canvas || !canvas.width || !canvas.height) return false;
+    if (img && img.draw && typeof img.draw.hasRasterInk === 'boolean') {
+      return !!img.draw.hasRasterInk;
+    }
+    const mp = (canvas.width * canvas.height) / 1e6;
+    if (mp > 2) return false;
+    return canvasHasInkScan(canvas);
+  }
+
+  function rasterNeedsPersist(img) {
+    if (!img || !img.draw || !img.draw.rasterCanvas) return false;
+    return !!img.draw.hasRasterInk;
   }
 
   function restoreRaster(canvas, blob) {
@@ -285,16 +325,54 @@
     };
   }
 
+  /** 轻量落盘：texts/shapes/raster，保留已有 drawHistory，不序列化 undo */
   async function flushSaveEdit(imageId) {
     if (!available || restoring || !imageId) return;
     const img = App.State.getImage(imageId);
     if (!img) return;
     const snap = snapshotEdit(img);
     let rasterBlob = null;
-    if (img.draw && img.draw.rasterCanvas && canvasHasInk(img.draw.rasterCanvas)) {
+    if (rasterNeedsPersist(img)) {
       rasterBlob = await canvasToBlob(img.draw.rasterCanvas);
     }
-    const base = { ...snap, rasterBlob };
+    let prevHistory = null;
+    try {
+      const existing = await getOne('edits', imageId);
+      if (existing && existing.drawHistory) prevHistory = existing.drawHistory;
+    } catch (e) {}
+    const payload = { ...snap, rasterBlob, drawHistory: prevHistory };
+    try {
+      await saveEdit(imageId, payload);
+      checkQuotaAndNotify().catch(() => {});
+    } catch (e) {
+      if (e && e.name === 'QuotaExceededError') {
+        try {
+          await saveEdit(imageId, { ...snap, rasterBlob, drawHistory: null });
+        } catch (e2) {
+          console.error('save edit without history failed', e2);
+        }
+        return;
+      }
+      throw e;
+    }
+  }
+
+  /** 仅更新 drawHistory（合并当前 snap + raster，避免历史先写时缺正文） */
+  async function flushSaveDrawHistory(imageId) {
+    if (!available || restoring || !imageId) return;
+    const img = App.State.getImage(imageId);
+    if (!img) return;
+    const snap = snapshotEdit(img);
+    let rasterBlob = null;
+    let existing = null;
+    try {
+      existing = await getOne('edits', imageId);
+    } catch (e) {}
+    if (rasterNeedsPersist(img)) {
+      rasterBlob = await canvasToBlob(img.draw.rasterCanvas);
+    } else if (existing && existing.rasterBlob) {
+      rasterBlob = existing.rasterBlob;
+    }
 
     let drawHistory = null;
     if (App.Draw && typeof App.Draw.serializeUndoForDisk === 'function') {
@@ -306,16 +384,16 @@
       }
     }
 
-    const payloadWithHist = { ...base, drawHistory: drawHistory || null };
+    const payload = { ...snap, rasterBlob, drawHistory: drawHistory || null };
     try {
-      await saveEdit(imageId, payloadWithHist);
+      await saveEdit(imageId, payload);
       checkQuotaAndNotify().catch(() => {});
     } catch (e) {
       if (e && e.name === 'QuotaExceededError') {
         try {
-          await saveEdit(imageId, { ...base, drawHistory: null });
+          await saveEdit(imageId, { ...snap, rasterBlob, drawHistory: null });
         } catch (e2) {
-          console.error('save edit without history failed', e2);
+          console.error('save draw history quota failed', e2);
         }
         return;
       }
@@ -328,11 +406,23 @@
     if (editTimers.has(imageId)) clearTimeout(editTimers.get(imageId));
     editTimers.set(imageId, setTimeout(() => {
       editTimers.delete(imageId);
-      flushSaveEdit(imageId).catch(e => {
+      enqueueEditWrite(imageId, () => flushSaveEdit(imageId)).catch(e => {
         if (e && e.name === 'QuotaExceededError') return;
         handleWriteError(e);
       });
-    }, DEBOUNCE_MS));
+    }, EDIT_DEBOUNCE_MS));
+  }
+
+  function scheduleSaveDrawHistory(imageId) {
+    if (!available || restoring || !imageId) return;
+    if (historyTimers.has(imageId)) clearTimeout(historyTimers.get(imageId));
+    historyTimers.set(imageId, setTimeout(() => {
+      historyTimers.delete(imageId);
+      enqueueEditWrite(imageId, () => flushSaveDrawHistory(imageId)).catch(e => {
+        if (e && e.name === 'QuotaExceededError') return;
+        handleWriteError(e);
+      });
+    }, HISTORY_DEBOUNCE_MS));
   }
 
   async function saveFont(family, data, fileName) {
@@ -367,6 +457,8 @@
     if (!db) return;
     editTimers.forEach(t => clearTimeout(t));
     editTimers.clear();
+    historyTimers.forEach(t => clearTimeout(t));
+    historyTimers.clear();
     const names = ['images', 'edits', 'fonts', 'session'];
     const tx = db.transaction(names, 'readwrite');
     names.forEach(n => tx.objectStore(n).clear());
@@ -425,6 +517,7 @@
             if (edit.rasterBlob && App.Draw) {
               const canvas = App.Draw.ensureRaster(img);
               await restoreRaster(canvas, edit.rasterBlob);
+              img.draw.hasRasterInk = true;
             }
             if (edit.drawHistory && Array.isArray(edit.drawHistory.undo) && App.Draw && App.Draw.hydrateUndoFromDisk) {
               await App.Draw.hydrateUndoFromDisk(img, edit.drawHistory.undo);
@@ -471,14 +564,46 @@
     }
   }
 
+  function flushPendingForImage(imageId) {
+    if (!imageId || !available) return;
+    if (editTimers.has(imageId)) {
+      clearTimeout(editTimers.get(imageId));
+      editTimers.delete(imageId);
+    }
+    if (historyTimers.has(imageId)) {
+      clearTimeout(historyTimers.get(imageId));
+      historyTimers.delete(imageId);
+    }
+    enqueueEditWrite(imageId, () => flushSaveDrawHistory(imageId)).catch(() => {});
+  }
+
+  function flushAllPendingEdits() {
+    if (!available) return;
+    const ids = new Set([...editTimers.keys(), ...historyTimers.keys()]);
+    const cur = App.State && App.State.currentId;
+    if (cur) ids.add(cur);
+    editTimers.forEach((timer, id) => {
+      clearTimeout(timer);
+      editTimers.delete(id);
+    });
+    historyTimers.forEach((timer, id) => {
+      clearTimeout(timer);
+      historyTimers.delete(id);
+    });
+    ids.forEach(id => {
+      enqueueEditWrite(id, () => flushSaveDrawHistory(id)).catch(() => {});
+    });
+  }
+
   function initFlushHooks() {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'hidden' || !available) return;
-      editTimers.forEach((timer, id) => {
-        clearTimeout(timer);
-        editTimers.delete(id);
-        flushSaveEdit(id);
-      });
+      flushAllPendingEdits();
+      saveSession();
+    });
+    window.addEventListener('pagehide', () => {
+      if (!available) return;
+      flushAllPendingEdits();
       saveSession();
     });
   }
@@ -493,6 +618,9 @@
     saveEdit,
     scheduleSaveEdit,
     flushSaveEdit,
+    scheduleSaveDrawHistory,
+    flushSaveDrawHistory,
+    flushPendingForImage,
     snapshotEdit,
     saveFont,
     getFont,
