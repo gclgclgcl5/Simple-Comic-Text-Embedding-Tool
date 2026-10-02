@@ -18,6 +18,8 @@
 
   const bundledFamilies = new Set(BUNDLED_FONTS.map(f => f.family));
   const DEFAULT_LABEL = '默认（系统字体）';
+  /** 本次会话里的字体字节，工程包导出不依赖 IndexedDB 是否还连着 */
+  const fontCache = new Map();
 
   function labelForFamily(family) {
     return family ? family : DEFAULT_LABEL;
@@ -99,9 +101,24 @@
     return data;
   }
 
+  function cloneBuffer(data) {
+    return toArrayBuffer(data).slice(0);
+  }
+
+  function rememberFont(family, data, fileName) {
+    if (!family || !data) return;
+    fontCache.set(family, { family, fileName: fileName || family, data: cloneBuffer(data) });
+  }
+
+  function getCachedFont(family) {
+    return fontCache.get(family) || null;
+  }
+
   async function loadFontFromStorage(family, data) {
-    if (bundledFamilies.has(family) || customFonts.includes(family)) return;
-    const ff = new FontFace(family, data);
+    if (bundledFamilies.has(family)) return;
+    rememberFont(family, data, family);
+    if (customFonts.includes(family)) return;
+    const ff = new FontFace(family, cloneBuffer(data));
     await ff.load();
     document.fonts.add(ff);
     customFonts.push(family);
@@ -109,18 +126,21 @@
 
   async function registerFont(family, data, opts) {
     opts = opts || {};
+    const fileName = opts.fileName || family;
+    rememberFont(family, data, fileName);
     if (customFonts.includes(family)) {
       if (!opts.silent) toast('字体「' + family + '」已存在');
       return;
     }
-    const ff = new FontFace(family, data);
+    const ff = new FontFace(family, cloneBuffer(data));
     await ff.load();
     document.fonts.add(ff);
     customFonts.push(family);
     refreshFontSelect();
     if (!opts.silent) toast('已加载字体：' + family);
     if (App.Storage && App.Storage.isAvailable() && !App.Storage.isRestoring()) {
-      await App.Storage.saveFont(family, toArrayBuffer(data), opts.fileName || family);
+      const cached = fontCache.get(family);
+      await App.Storage.saveFont(family, cached ? cached.data : cloneBuffer(data), fileName);
     }
   }
 
@@ -165,7 +185,7 @@
 
   App.Fonts = {
     BUNDLED_FONTS, injectBundledFonts, refreshFontSelect, addFontFile,
-    registerFont, loadFontFromStorage, isBundledFamily, listLoadedFamilies,
+    registerFont, loadFontFromStorage, isBundledFamily, listLoadedFamilies, getCachedFont,
     getFontValue, setFontValue, labelForFamily
   };
 })(window.App = window.App || {});

@@ -16,6 +16,8 @@
   let db = null;
   let available = false;
   let restoring = false;
+  /** 断线后的重连，避免导出/落盘同时各开一次 */
+  let reopenPromise = null;
   const editTimers = new Map();
   const historyTimers = new Map();
   /** 同一 imageId 的写盘串行，避免轻量/历史并行互相覆盖 */
@@ -55,6 +57,31 @@
     if (App.Utils && App.Utils.toast) App.Utils.toast(msg, ms);
   }
 
+  function isConnError(e) {
+    if (!e) return false;
+    if (e.name === 'InvalidStateError') return true;
+    return /database connection is clos/i.test(String(e.message || ''));
+  }
+
+  function attachDb(database) {
+    db = database;
+    available = true;
+    database.onerror = e => console.error('IndexedDB error', e);
+    database.onversionchange = () => {
+      if (db === database) {
+        db = null;
+        available = false;
+      }
+      try { database.close(); } catch (err) {}
+    };
+    database.onclose = () => {
+      if (db !== database) return;
+      db = null;
+      available = false;
+      if (!reopenPromise) kickReopen();
+    };
+  }
+
   function open() {
     return new Promise(resolve => {
       if (!window.indexedDB) {
@@ -71,34 +98,68 @@
         if (!d.objectStoreNames.contains('session')) d.createObjectStore('session');
       };
       req.onsuccess = () => {
-        db = req.result;
-        db.onerror = e => console.error('IndexedDB error', e);
-        available = true;
+        attachDb(req.result);
         resolve(true);
       };
       req.onerror = () => {
         available = false;
         resolve(false);
       };
+      req.onblocked = () => {
+        console.warn('IndexedDB open blocked');
+      };
     });
+  }
+
+  /** 丢掉正在关闭的连接并重新 open。并发调用共用同一次重连。 */
+  function kickReopen() {
+    if (reopenPromise) return reopenPromise;
+    const dying = db;
+    db = null;
+    available = false;
+    const pending = new Promise(resolve => {
+      setTimeout(() => {
+        if (dying && dying !== db) {
+          try { dying.close(); } catch (err) {}
+        }
+        open().then(ok => resolve(!!ok), () => resolve(false));
+      }, 50);
+    });
+    reopenPromise = pending;
+    pending.finally(() => {
+      if (reopenPromise === pending) reopenPromise = null;
+    });
+    return pending;
+  }
+
+  async function withDb(fn) {
+    if (!db) {
+      const ok = await kickReopen();
+      if (!ok || !db) return null;
+    }
+    try {
+      return await fn(db);
+    } catch (e) {
+      if (!isConnError(e)) throw e;
+      const ok = await kickReopen();
+      if (!ok || !db) throw e;
+      return await fn(db);
+    }
   }
 
   function isAvailable() { return available; }
   function isRestoring() { return restoring; }
 
-  function getStore(name, mode) {
-    if (!db) return null;
-    return db.transaction(name, mode).objectStore(name);
-  }
-
   async function put(storeName, value, key) {
-    if (!available || restoring || !db) return;
+    if (restoring) return;
     try {
-      const tx = db.transaction(storeName, 'readwrite');
-      const store = tx.objectStore(storeName);
-      if (key !== undefined) store.put(value, key);
-      else store.put(value);
-      await txDone(tx);
+      await withDb(async database => {
+        const tx = database.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        if (key !== undefined) store.put(value, key);
+        else store.put(value);
+        await txDone(tx);
+      });
     } catch (e) {
       handleWriteError(e);
       if (e && e.name === 'QuotaExceededError') throw e;
@@ -106,28 +167,31 @@
   }
 
   async function del(storeName, key) {
-    if (!available || !db) return;
     try {
-      const tx = db.transaction(storeName, 'readwrite');
-      tx.objectStore(storeName).delete(key);
-      await txDone(tx);
+      await withDb(async database => {
+        const tx = database.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).delete(key);
+        await txDone(tx);
+      });
     } catch (e) {
       handleWriteError(e);
     }
   }
 
   async function getAll(storeName) {
-    if (!db) return [];
-    const store = getStore(storeName, 'readonly');
-    if (!store) return [];
-    return reqToPromise(store.getAll());
+    const rows = await withDb(async database => {
+      const store = database.transaction(storeName, 'readonly').objectStore(storeName);
+      return reqToPromise(store.getAll());
+    });
+    return rows || [];
   }
 
   async function getOne(storeName, key) {
-    if (!db) return null;
-    const store = getStore(storeName, 'readonly');
-    if (!store) return null;
-    return reqToPromise(store.get(key));
+    const row = await withDb(async database => {
+      const store = database.transaction(storeName, 'readonly').objectStore(storeName);
+      return reqToPromise(store.get(key));
+    });
+    return row === undefined ? null : row;
   }
 
   function handleWriteError(e) {
@@ -327,7 +391,7 @@
 
   /** 轻量落盘：texts/shapes/raster，保留已有 drawHistory，不序列化 undo */
   async function flushSaveEdit(imageId) {
-    if (!available || restoring || !imageId) return;
+    if (restoring || !imageId) return;
     const img = App.State.getImage(imageId);
     if (!img) return;
     const snap = snapshotEdit(img);
@@ -359,7 +423,7 @@
 
   /** 仅更新 drawHistory（合并当前 snap + raster，避免历史先写时缺正文） */
   async function flushSaveDrawHistory(imageId) {
-    if (!available || restoring || !imageId) return;
+    if (restoring || !imageId) return;
     const img = App.State.getImage(imageId);
     if (!img) return;
     const snap = snapshotEdit(img);
@@ -402,7 +466,7 @@
   }
 
   function scheduleSaveEdit(imageId) {
-    if (!available || restoring || !imageId) return;
+    if (restoring || !imageId || !window.indexedDB) return;
     if (editTimers.has(imageId)) clearTimeout(editTimers.get(imageId));
     editTimers.set(imageId, setTimeout(() => {
       editTimers.delete(imageId);
@@ -414,7 +478,7 @@
   }
 
   function scheduleSaveDrawHistory(imageId) {
-    if (!available || restoring || !imageId) return;
+    if (restoring || !imageId || !window.indexedDB) return;
     if (historyTimers.has(imageId)) clearTimeout(historyTimers.get(imageId));
     historyTimers.set(imageId, setTimeout(() => {
       historyTimers.delete(imageId);
@@ -432,12 +496,12 @@
   }
 
   async function getFont(family) {
-    if (!family || !available || !db) return null;
+    if (!family) return null;
     return getOne('fonts', family);
   }
 
   async function saveSession() {
-    if (!available || restoring) return;
+    if (restoring) return;
     const State = App.State;
     await put('session', {
       currentId: State.currentId,
@@ -454,15 +518,16 @@
   }
 
   async function clearAll() {
-    if (!db) return;
     editTimers.forEach(t => clearTimeout(t));
     editTimers.clear();
     historyTimers.forEach(t => clearTimeout(t));
     historyTimers.clear();
     const names = ['images', 'edits', 'fonts', 'session'];
-    const tx = db.transaction(names, 'readwrite');
-    names.forEach(n => tx.objectStore(n).clear());
-    await txDone(tx);
+    await withDb(async database => {
+      const tx = database.transaction(names, 'readwrite');
+      names.forEach(n => tx.objectStore(n).clear());
+      await txDone(tx);
+    });
   }
 
   function normalizeProjects(raw) {
@@ -565,7 +630,7 @@
   }
 
   function flushPendingForImage(imageId) {
-    if (!imageId || !available) return;
+    if (!imageId || !window.indexedDB) return;
     if (editTimers.has(imageId)) {
       clearTimeout(editTimers.get(imageId));
       editTimers.delete(imageId);
@@ -578,7 +643,7 @@
   }
 
   function flushAllPendingEdits() {
-    if (!available) return;
+    if (!window.indexedDB) return;
     const ids = new Set([...editTimers.keys(), ...historyTimers.keys()]);
     const cur = App.State && App.State.currentId;
     if (cur) ids.add(cur);
@@ -597,12 +662,12 @@
 
   function initFlushHooks() {
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'hidden' || !available) return;
+      if (document.visibilityState !== 'hidden' || !window.indexedDB) return;
       flushAllPendingEdits();
       saveSession();
     });
     window.addEventListener('pagehide', () => {
-      if (!available) return;
+      if (!window.indexedDB) return;
       flushAllPendingEdits();
       saveSession();
     });

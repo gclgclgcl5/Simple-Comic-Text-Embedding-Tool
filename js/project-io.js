@@ -183,9 +183,21 @@
 
     const fontFamilies = collectCustomFontFamilies(list);
     const fontsMeta = [];
+    const skippedFonts = [];
     for (const family of fontFamilies) {
-      const rec = App.Storage.isAvailable() ? await App.Storage.getFont(family) : null;
-      if (!rec || !rec.data) continue;
+      let rec = (App.Fonts && App.Fonts.getCachedFont) ? App.Fonts.getCachedFont(family) : null;
+      if (!rec || !rec.data) {
+        try {
+          rec = await App.Storage.getFont(family);
+        } catch (e) {
+          console.warn('export font', family, e);
+          rec = null;
+        }
+      }
+      if (!rec || !rec.data) {
+        skippedFonts.push(family);
+        continue;
+      }
       const ext = extFromName(rec.fileName, 'ttf');
       let fileName = 'fonts/' + safeFilePart(family) + '.' + ext;
       let n = 2;
@@ -212,7 +224,11 @@
 
     const zip = await App.Zip.makeZip(parts);
     App.Export.download(zip, '嵌字工程_' + stamp() + '.zip');
-    toast('✅ 已导出工程包（' + list.length + ' 张）');
+    if (skippedFonts.length) {
+      toast('已导出工程包（' + list.length + ' 张）。这些上传字体没能写入包内：' + skippedFonts.join('、'), 5200);
+    } else {
+      toast('✅ 已导出工程包（' + list.length + ' 张）');
+    }
   }
 
   function resolveUniqueName(scopeImages, name) {
