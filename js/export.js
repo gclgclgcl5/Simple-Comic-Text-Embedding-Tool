@@ -128,6 +128,9 @@
   }
 
   async function renderImage(img) {
+    if (App.Editor && App.Editor.applyStageFitForImage) {
+      await App.Editor.applyStageFitForImage(img);
+    }
     const c = document.createElement('canvas');
     c.width = img.w;
     c.height = img.h;
@@ -209,8 +212,15 @@
       const used = new Set(), parts = [];
       for (let i = 0; i < jobs.length; i++) {
         exportBtn.innerHTML = `导出中 ${i + 1}/${jobs.length}`;
-        const blob = await renderImage(jobs[i].img);
-        parts.push({ name: zipPartName(jobs[i].folder, jobs[i].img.name, used), blob });
+        const img = jobs[i].img;
+        if (App.Editor && App.Editor.applyStageFitForImage) {
+          await App.Editor.applyStageFitForImage(img);
+        }
+        if (App.Editor && App.Editor.prepareTextFontsForImage) {
+          await App.Editor.prepareTextFontsForImage(img);
+        }
+        const blob = await renderImage(img);
+        parts.push({ name: zipPartName(jobs[i].folder, img.name, used), blob });
         await new Promise(r => setTimeout(r, 0));
       }
       const zip = await makeZip(parts);
@@ -222,6 +232,7 @@
       toast('❌ 导出失败：' + err.message, 3200);
       return false;
     } finally {
+      if (App.Editor && App.Editor.layoutStage) App.Editor.layoutStage();
       App.Gallery.syncSelectUI();
       exportOneBtn.disabled = !State.current();
       if (App.ProjectIO) App.ProjectIO.syncExportLabels();
@@ -244,6 +255,7 @@
       console.error(err);
       toast('❌ 导出失败：' + (err && err.message ? err.message : err), 3200);
     } finally {
+      if (App.Editor && App.Editor.layoutStage) App.Editor.layoutStage();
       exportOneBtn.disabled = false;
       if (App.ProjectIO) App.ProjectIO.syncExportLabels();
     }

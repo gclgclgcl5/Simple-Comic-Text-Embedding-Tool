@@ -683,8 +683,8 @@
     syncPanUI();
   }
 
-  function computeFitSize() {
-    const img = State.current();
+  function computeFitSize(img) {
+    img = img || State.current();
     if (!img) return { fitW: 200, fitH: 200 };
     const pad = 36;
     const aw = Math.max(canvasArea.clientWidth - pad, 200);
@@ -734,6 +734,24 @@
       if (App.Draw) App.Draw.onStageResize();
     }
     return { fitChanged };
+  }
+
+  function nextAnimationFrame() {
+    return new Promise(function (resolve) {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  /** 按指定图的宽高比写入舞台盒子，不切图、不改缩放、不通知画笔层。供导出换行与编辑器共用 clientWidth。 */
+  async function applyStageFitForImage(img) {
+    if (!img || !stage) return;
+    const { fitW, fitH } = computeFitSize(img);
+    stage.style.width = fitW + 'px';
+    stage.style.height = fitH + 'px';
+    void stage.offsetWidth;
+    await nextAnimationFrame();
   }
 
   /**
@@ -1303,7 +1321,7 @@
   }
 
   App.Editor = {
-    selectImage, layoutStage, stageH, syncPropsUI,
+    selectImage, layoutStage, applyStageFitForImage, prepareTextFontsForImage, stageH, syncPropsUI,
     getZoom, setZoom, zoomByStep, zoomAt, resetZoom, syncZoomUI,
     clientToStageNorm, clientToStageLayout, stageLayoutSize, setStageVisible,
     isPanMode, setPanMode, togglePanMode, syncPanUI,
