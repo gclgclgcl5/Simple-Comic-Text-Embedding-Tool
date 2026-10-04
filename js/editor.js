@@ -813,7 +813,7 @@
     viewZoom = 1;
     lastFitW = 0;
     lastFitH = 0;
-    stageImg.src = img.url;
+    stageImg.src = (App.Preview && App.Preview.displayUrl) ? App.Preview.displayUrl(img) : img.url;
     setStageVisible(true);
     emptyEditor.hidden = true;
     currentName.textContent = img.name;

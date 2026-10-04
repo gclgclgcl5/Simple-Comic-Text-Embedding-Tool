@@ -303,7 +303,7 @@
       img.onload = () => {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         URL.revokeObjectURL(img.src);
         resolve();
       };
@@ -317,7 +317,7 @@
       const url = URL.createObjectURL(record.blob);
       const el = new Image();
       el.onload = () => {
-        resolve({
+        const img = {
           id: record.id,
           name: record.name,
           url,
@@ -329,7 +329,9 @@
           draw: App.Gallery.createDrawState(),
           selected: !!record.selected,
           projectId: record.projectId || null
-        });
+        };
+        if (App.Preview && App.Preview.attach) App.Preview.attach(img);
+        resolve(img);
       };
       el.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed: ' + record.name)); };
       el.src = url;
@@ -385,7 +387,9 @@
         brushSize: prefs.brushSize ?? 12,
         eraserSize: prefs.eraserSize ?? 20,
         selectedShapeId: d.selectedShapeId || null
-      }
+      },
+      rasterW: (App.Preview && App.Preview.rasterW) ? App.Preview.rasterW(img) : img.w,
+      rasterH: (App.Preview && App.Preview.rasterH) ? App.Preview.rasterH(img) : img.h
     };
   }
 
@@ -598,7 +602,10 @@
               img.draw.hasRasterInk = true;
             }
             if (edit.drawHistory && Array.isArray(edit.drawHistory.undo) && App.Draw && App.Draw.hydrateUndoFromDisk) {
-              await App.Draw.hydrateUndoFromDisk(img, edit.drawHistory.undo);
+              await App.Draw.hydrateUndoFromDisk(img, edit.drawHistory.undo, {
+                sourceW: edit.rasterW || img.w,
+                sourceH: edit.rasterH || img.h
+              });
             }
           }
           images.push(img);

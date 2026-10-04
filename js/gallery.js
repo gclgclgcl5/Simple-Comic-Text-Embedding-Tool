@@ -275,7 +275,7 @@
     d.title = img.name;
     if (inRoot) d.draggable = true;
     d.innerHTML = `
-      <div class="thumb-preview"><img src="${img.url}" alt=""></div>
+      <div class="thumb-preview"><img src="${esc(App.Preview && App.Preview.displayUrl ? App.Preview.displayUrl(img) : img.url)}" alt=""></div>
       <div class="thumb-body">
         <div class="meta" title="双击重命名">${esc(img.name)}</div>
         <span class="badge" ${img.texts.length ? '' : 'hidden'}>${img.texts.length} 段</span>
@@ -381,6 +381,7 @@
         texts: [], draw: createDrawState(), selected: true,
         projectId
       };
+      if (App.Preview && App.Preview.attach) App.Preview.attach(img);
       if (projectId && isNameTaken(State.imagesInProject(projectId), name, img.id)) {
         URL.revokeObjectURL(url);
         toast('命名冲突，请稍后重试');

@@ -147,12 +147,14 @@
       selected: false,
       projectId
     };
+    if (App.Preview && App.Preview.attach) App.Preview.attach(img);
 
     nameScope.push(img);
 
     if (App.Draw && src.draw && src.draw.rasterCanvas) {
       const dest = App.Draw.ensureRaster(img);
-      dest.getContext('2d').drawImage(src.draw.rasterCanvas, 0, 0, img.w, img.h);
+      dest.getContext('2d').drawImage(src.draw.rasterCanvas, 0, 0, dest.width, dest.height);
+      if (App.Draw.markRasterInk) App.Draw.markRasterInk(img);
     }
 
     return img;

@@ -70,36 +70,46 @@
     return false;
   }
 
+  function rw(img) {
+    return (App.Preview && App.Preview.rasterW) ? App.Preview.rasterW(img) : Math.max(1, (img && img.w) || 1);
+  }
+
+  function rh(img) {
+    return (App.Preview && App.Preview.rasterH) ? App.Preview.rasterH(img) : Math.max(1, (img && img.h) || 1);
+  }
+
   function ensureRaster(img) {
     const d = ensureDraw(img);
+    const tw = rw(img), th = rh(img);
     if (!d.rasterCanvas) {
       d.rasterCanvas = document.createElement('canvas');
-      d.rasterCanvas.width = img.w;
-      d.rasterCanvas.height = img.h;
-    } else if (d.rasterCanvas.width !== img.w || d.rasterCanvas.height !== img.h) {
+      d.rasterCanvas.width = tw;
+      d.rasterCanvas.height = th;
+    } else if (d.rasterCanvas.width !== tw || d.rasterCanvas.height !== th) {
       const old = d.rasterCanvas;
       d.rasterCanvas = document.createElement('canvas');
-      d.rasterCanvas.width = img.w;
-      d.rasterCanvas.height = img.h;
-      d.rasterCanvas.getContext('2d').drawImage(old, 0, 0, img.w, img.h);
+      d.rasterCanvas.width = tw;
+      d.rasterCanvas.height = th;
+      d.rasterCanvas.getContext('2d').drawImage(old, 0, 0, tw, th);
     }
     return d.rasterCanvas;
   }
 
   function stageToImage(clientX, clientY, img) {
+    const tw = rw(img), th = rh(img);
     if (App.Editor && App.Editor.clientToStageNorm) {
       const n = App.Editor.clientToStageNorm(clientX, clientY);
       return {
-        x: n.nx * img.w,
-        y: n.ny * img.h,
+        x: n.nx * tw,
+        y: n.ny * th,
         nx: n.nx,
         ny: n.ny
       };
     }
     const r = stage.getBoundingClientRect();
     return {
-      x: (clientX - r.left) / r.width * img.w,
-      y: (clientY - r.top) / r.height * img.h,
+      x: (clientX - r.left) / r.width * tw,
+      y: (clientY - r.top) / r.height * th,
       nx: (clientX - r.left) / r.width,
       ny: (clientY - r.top) / r.height
     };
@@ -119,7 +129,7 @@
     };
   }
 
-  function scaleFactor(img) { return img.w / Math.max(1, stage.clientWidth); }
+  function scaleFactor(img) { return rw(img) / Math.max(1, stage.clientWidth); }
 
   function cloneShapes(d) {
     return JSON.parse(JSON.stringify((d && d.shapes) || []));
@@ -131,17 +141,18 @@
     let raster = null;
     if (canvas) {
       const ctx = canvas.getContext('2d');
-      raster = ctx.getImageData(0, 0, img.w, img.h);
+      raster = ctx.getImageData(0, 0, rw(img), rh(img));
     }
     return { kind: 'full', raster, shapes: cloneShapes(d) };
   }
 
   function ensureStrokeBackup(img) {
     const src = ensureRaster(img);
-    if (!strokeBackup || strokeBackup.width !== img.w || strokeBackup.height !== img.h) {
+    const tw = rw(img), th = rh(img);
+    if (!strokeBackup || strokeBackup.width !== tw || strokeBackup.height !== th) {
       strokeBackup = document.createElement('canvas');
-      strokeBackup.width = img.w;
-      strokeBackup.height = img.h;
+      strokeBackup.width = tw;
+      strokeBackup.height = th;
     }
     strokeBackup.getContext('2d').drawImage(src, 0, 0);
     return strokeBackup;
@@ -165,10 +176,11 @@
 
   function clampDirtyBox(img) {
     if (!strokeDirty) return null;
-    const x0 = Math.max(0, Math.min(img.w, Math.floor(strokeDirty.x0)));
-    const y0 = Math.max(0, Math.min(img.h, Math.floor(strokeDirty.y0)));
-    const x1 = Math.max(0, Math.min(img.w, Math.ceil(strokeDirty.x1)));
-    const y1 = Math.max(0, Math.min(img.h, Math.ceil(strokeDirty.y1)));
+    const tw = rw(img), th = rh(img);
+    const x0 = Math.max(0, Math.min(tw, Math.floor(strokeDirty.x0)));
+    const y0 = Math.max(0, Math.min(th, Math.floor(strokeDirty.y0)));
+    const x1 = Math.max(0, Math.min(tw, Math.ceil(strokeDirty.x1)));
+    const y1 = Math.max(0, Math.min(th, Math.ceil(strokeDirty.y1)));
     const w = x1 - x0;
     const h = y1 - y0;
     if (w < 1 || h < 1) return null;
@@ -195,7 +207,7 @@
       } catch (e) {
         console.warn('stroke patch snapshot failed, fallback full', e);
         try {
-          const raster = strokeBackup.getContext('2d').getImageData(0, 0, img.w, img.h);
+          const raster = strokeBackup.getContext('2d').getImageData(0, 0, rw(img), rh(img));
           snap = { kind: 'full', raster, shapes: shapesBefore };
         } catch (e2) {
           console.warn('stroke full fallback failed', e2);
@@ -210,10 +222,11 @@
   function snapshotPatchRegion(img, x, y, w, h, shapes) {
     const canvas = ensureRaster(img);
     const ctx = canvas.getContext('2d');
-    const x0 = Math.max(0, Math.min(img.w, Math.floor(x)));
-    const y0 = Math.max(0, Math.min(img.h, Math.floor(y)));
-    const x1 = Math.max(0, Math.min(img.w, Math.ceil(x + w)));
-    const y1 = Math.max(0, Math.min(img.h, Math.ceil(y + h)));
+    const tw = rw(img), th = rh(img);
+    const x0 = Math.max(0, Math.min(tw, Math.floor(x)));
+    const y0 = Math.max(0, Math.min(th, Math.floor(y)));
+    const x1 = Math.max(0, Math.min(tw, Math.ceil(x + w)));
+    const y1 = Math.max(0, Math.min(th, Math.ceil(y + h)));
     const pw = x1 - x0;
     const ph = y1 - y0;
     if (pw < 1 || ph < 1) {
@@ -232,7 +245,7 @@
     const canvas = ensureRaster(img);
     const ctx = canvas.getContext('2d');
     if (!snap) {
-      ctx.clearRect(0, 0, img.w, img.h);
+      ctx.clearRect(0, 0, rw(img), rh(img));
       d.shapes = [];
       d.hasRasterInk = false;
     } else if (snap.kind === 'patch') {
@@ -246,7 +259,7 @@
       d.shapes = JSON.parse(JSON.stringify(snap.shapes || []));
       d.hasRasterInk = true;
     } else {
-      ctx.clearRect(0, 0, img.w, img.h);
+      ctx.clearRect(0, 0, rw(img), rh(img));
       d.shapes = JSON.parse(JSON.stringify(snap.shapes || []));
       d.hasRasterInk = false;
     }
@@ -263,7 +276,7 @@
     d.history.undo.push(before);
     d.history.redo = [];
     while (d.history.undo.length > HISTORY_MAX) d.history.undo.shift();
-    const mp = (img.w * img.h) / 1e6;
+    const mp = (rw(img) * rh(img)) / 1e6;
     if (mp > FULL_HISTORY_CAP_MP) {
       while (countFullUndos(d) > FULL_HISTORY_MAX_HD) {
         const idx = d.history.undo.findIndex(s => s && s.kind !== 'patch');
@@ -298,7 +311,7 @@
       await new Promise((resolve, reject) => {
         const im = new Image();
         im.onload = () => {
-          canvas.getContext('2d').drawImage(im, 0, 0);
+          canvas.getContext('2d').drawImage(im, 0, 0, w, h);
           URL.revokeObjectURL(im.src);
           resolve();
         };
@@ -341,7 +354,7 @@
     return { undo: out };
   }
 
-  async function hydrateUndoFromDisk(img, entries) {
+  async function hydrateUndoFromDisk(img, entries, opts) {
     const d = ensureDraw(img);
     d.history.redo = [];
     d.history.undo = [];
@@ -349,20 +362,33 @@
       if (App.DrawToolbar && App.DrawToolbar.updateHistoryButtons) App.DrawToolbar.updateHistoryButtons();
       return;
     }
+    const destW = rw(img), destH = rh(img);
+    const srcW = (opts && opts.sourceW) || destW;
+    const srcH = (opts && opts.sourceH) || destH;
+    const sx = destW / Math.max(1, srcW);
+    const sy = destH / Math.max(1, srcH);
+    const needScale = Math.abs(sx - 1) > 0.002 || Math.abs(sy - 1) > 0.002;
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i] || {};
       const shapes = JSON.parse(JSON.stringify(entry.shapes || []));
       const p = entry.patch;
       if (p && typeof p.w === 'number' && typeof p.h === 'number' && p.w > 0 && p.h > 0 && entry.rasterBlob) {
+        let x = p.x | 0, y = p.y | 0, w = p.w | 0, h = p.h | 0;
+        if (needScale) {
+          x = Math.round(x * sx);
+          y = Math.round(y * sy);
+          w = Math.max(1, Math.round(w * sx));
+          h = Math.max(1, Math.round(h * sy));
+        }
         let raster = null;
         try {
-          raster = await blobToImageData(entry.rasterBlob, p.w, p.h);
+          raster = await blobToImageData(entry.rasterBlob, w, h);
         } catch (e) {
           console.warn('hydrate draw undo patch', e);
         }
         d.history.undo.push({
           kind: 'patch',
-          x: p.x|0, y: p.y|0, w: p.w|0, h: p.h|0,
+          x, y, w, h,
           raster,
           shapes
         });
@@ -370,7 +396,7 @@
         let raster = null;
         if (entry.rasterBlob) {
           try {
-            raster = await blobToImageData(entry.rasterBlob, img.w, img.h);
+            raster = await blobToImageData(entry.rasterBlob, destW, destH);
           } catch (e) {
             console.warn('hydrate draw undo raster', e);
           }
@@ -417,9 +443,11 @@
     persistDraw();
   }
 
-  function bakeShapeToRaster(ctx, shape, img) {
-    const cx = shape.x * img.w, cy = shape.y * img.h;
-    const hw = shape.w * img.w, hh = shape.h * img.h;
+  function bakeShapeToRaster(ctx, shape, img, width, height) {
+    const bw = width || rw(img);
+    const bh = height || rh(img);
+    const cx = shape.x * bw, cy = shape.y * bh;
+    const hw = shape.w * bw, hh = shape.h * bh;
     ctx.fillStyle = shape.color;
     if (shape.type === 'rect') {
       ctx.fillRect(cx - hw, cy - hh, hw * 2, hh * 2);
@@ -457,15 +485,16 @@
   }
 
   function shapeIntersectsCircle(s, img, ix, iy, radius) {
-    const l = (s.x - s.w) * img.w, r = (s.x + s.w) * img.w;
-    const t = (s.y - s.h) * img.h, b = (s.y + s.h) * img.h;
+    const tw = rw(img), th = rh(img);
+    const l = (s.x - s.w) * tw, r = (s.x + s.w) * tw;
+    const t = (s.y - s.h) * th, b = (s.y + s.h) * th;
     const cx = Math.max(l, Math.min(ix, r));
     const cy = Math.max(t, Math.min(iy, b));
     const dx = ix - cx, dy = iy - cy;
     if (dx * dx + dy * dy <= radius * radius) return true;
     if (s.type === 'rect') return true;
-    const nx = (ix / img.w - s.x) / Math.max(s.w, 0.001);
-    const ny = (iy / img.h - s.y) / Math.max(s.h, 0.001);
+    const nx = (ix / tw - s.x) / Math.max(s.w, 0.001);
+    const ny = (iy / th - s.y) / Math.max(s.h, 0.001);
     if (nx * nx + ny * ny <= 1) return true;
     return false;
   }
@@ -779,24 +808,28 @@
    */
   function applySmartFill(img, norm, mode) {
     if (!App.SmartFill) return false;
-    const x0 = Math.floor(Math.min(norm.x0, norm.x1) * img.w);
-    const y0 = Math.floor(Math.min(norm.y0, norm.y1) * img.h);
-    const x1 = Math.ceil(Math.max(norm.x0, norm.x1) * img.w);
-    const y1 = Math.ceil(Math.max(norm.y0, norm.y1) * img.h);
+    const tw = rw(img), th = rh(img);
+    const x0 = Math.floor(Math.min(norm.x0, norm.x1) * tw);
+    const y0 = Math.floor(Math.min(norm.y0, norm.y1) * th);
+    const x1 = Math.ceil(Math.max(norm.x0, norm.x1) * tw);
+    const y1 = Math.ceil(Math.max(norm.y0, norm.y1) * th);
     const rx = Math.max(0, x0);
     const ry = Math.max(0, y0);
-    const rx1 = Math.min(img.w, x1);
-    const ry1 = Math.min(img.h, y1);
+    const rx1 = Math.min(tw, x1);
+    const ry1 = Math.min(th, y1);
     const roiW = rx1 - rx;
     const roiH = ry1 - ry;
     if (roiW < 4 || roiH < 4) return false;
 
     const canvas = document.createElement('canvas');
-    canvas.width = img.w;
-    canvas.height = img.h;
+    canvas.width = tw;
+    canvas.height = th;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(img.imgEl, 0, 0, img.w, img.h);
-    renderToExport(ctx, img);
+    const base = (App.Preview && App.Preview.previewSource) ? App.Preview.previewSource(img) : img.imgEl;
+    if (base) ctx.drawImage(base, 0, 0, tw, th);
+    const d = ensureDraw(img);
+    if (d.rasterCanvas) ctx.drawImage(d.rasterCanvas, 0, 0, tw, th);
+    d.shapes.forEach(s => bakeShapeToRaster(ctx, s, img, tw, th));
 
     let imageData;
     try {
@@ -1112,7 +1145,9 @@
   }
 
   async function pickColorAt(img, ix, iy) {
-    const hex = await App.Export.sampleColorAt(img, ix, iy);
+    const ox = (ix / rw(img)) * img.w;
+    const oy = (iy / rh(img)) * img.h;
+    const hex = await App.Export.sampleColorAt(img, ox, oy);
     State.setDrawPrefsPartial({ color: hex });
     App.DrawToolbar.syncColorUI(hex);
     if (State.drawPrefs.tool === 'eyedropper') setTool(lastToolBeforeEyedropper);
@@ -1155,8 +1190,8 @@
   function renderToExport(ctx, img) {
     if (!img.draw) return;
     const d = img.draw;
-    if (d.rasterCanvas) ctx.drawImage(d.rasterCanvas, 0, 0);
-    d.shapes.forEach(s => bakeShapeToRaster(ctx, s, img));
+    if (d.rasterCanvas) ctx.drawImage(d.rasterCanvas, 0, 0, img.w, img.h);
+    d.shapes.forEach(s => bakeShapeToRaster(ctx, s, img, img.w, img.h));
   }
 
   App.Draw = {

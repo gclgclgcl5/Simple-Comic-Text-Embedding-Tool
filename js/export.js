@@ -140,15 +140,30 @@
   }
 
   async function sampleColorAt(img, ix, iy) {
+    const tw = (App.Preview && App.Preview.rasterW) ? App.Preview.rasterW(img) : img.w;
+    const th = (App.Preview && App.Preview.rasterH) ? App.Preview.rasterH(img) : img.h;
     const canvas = document.createElement('canvas');
-    canvas.width = img.w;
-    canvas.height = img.h;
+    canvas.width = tw;
+    canvas.height = th;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(img.imgEl, 0, 0, img.w, img.h);
-    if (App.Draw) App.Draw.renderToExport(ctx, img);
-    await renderTexts(ctx, img);
-    const px = Math.max(0, Math.min(img.w - 1, Math.floor(ix)));
-    const py = Math.max(0, Math.min(img.h - 1, Math.floor(iy)));
+    const base = (App.Preview && App.Preview.previewSource) ? App.Preview.previewSource(img) : img.imgEl;
+    if (base) ctx.drawImage(base, 0, 0, tw, th);
+    if (img.draw && img.draw.rasterCanvas) ctx.drawImage(img.draw.rasterCanvas, 0, 0, tw, th);
+    if (img.draw && img.draw.shapes && App.Draw && App.Draw.ensureRaster) {
+      img.draw.shapes.forEach(s => {
+        const cx = s.x * tw, cy = s.y * th;
+        const hw = s.w * tw, hh = s.h * th;
+        ctx.fillStyle = s.color;
+        if (s.type === 'rect') ctx.fillRect(cx - hw, cy - hh, hw * 2, hh * 2);
+        else {
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.max(1, hw), Math.max(1, hh), 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+    }
+    const px = Math.max(0, Math.min(tw - 1, Math.floor((ix / Math.max(1, img.w)) * tw)));
+    const py = Math.max(0, Math.min(th - 1, Math.floor((iy / Math.max(1, img.h)) * th)));
     const data = ctx.getImageData(px, py, 1, 1).data;
     return '#' + [data[0], data[1], data[2]].map(v => v.toString(16).padStart(2, '0')).join('');
   }

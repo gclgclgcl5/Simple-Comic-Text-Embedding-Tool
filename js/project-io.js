@@ -70,10 +70,27 @@
     return [...set];
   }
 
+  async function blobStretched(blob, destW, destH) {
+    if (!blob || !destW || !destH) return null;
+    const c = document.createElement('canvas');
+    c.width = destW;
+    c.height = destH;
+    await App.Storage.restoreRaster(c, blob);
+    return App.Storage.canvasToBlob(c);
+  }
+
   async function buildRasterBlob(img) {
     if (!img.draw || !img.draw.rasterCanvas) return null;
     if (!App.Storage.canvasHasInk(img.draw.rasterCanvas, img)) return null;
-    return App.Storage.canvasToBlob(img.draw.rasterCanvas);
+    const src = img.draw.rasterCanvas;
+    if (src.width === img.w && src.height === img.h) {
+      return App.Storage.canvasToBlob(src);
+    }
+    const c = document.createElement('canvas');
+    c.width = img.w;
+    c.height = img.h;
+    c.getContext('2d').drawImage(src, 0, 0, img.w, img.h);
+    return App.Storage.canvasToBlob(c);
   }
 
   function syncExportLabels() {
@@ -123,24 +140,45 @@
 
       const snap = App.Storage.snapshotEdit(img);
       const editPayload = { ...snap };
+      editPayload.rasterW = img.w;
+      editPayload.rasterH = img.h;
 
       if (App.Draw && typeof App.Draw.serializeUndoForDisk === 'function') {
         try {
           const hist = await App.Draw.serializeUndoForDisk(img);
           if (hist && Array.isArray(hist.undo) && hist.undo.length) {
+            const srcW = (App.Preview && App.Preview.rasterW) ? App.Preview.rasterW(img) : img.w;
+            const srcH = (App.Preview && App.Preview.rasterH) ? App.Preview.rasterH(img) : img.h;
+            const sx = img.w / Math.max(1, srcW);
+            const sy = img.h / Math.max(1, srcH);
             const undoMeta = [];
             for (let hi = 0; hi < hist.undo.length; hi++) {
               const step = hist.undo[hi] || {};
               const shapes = JSON.parse(JSON.stringify(step.shapes || []));
               let rasterRef = null;
-              if (step.rasterBlob) {
+              let patch = step.patch || null;
+              let histBlob = step.rasterBlob || null;
+              if (histBlob) {
+                if (patch && patch.w > 0 && patch.h > 0) {
+                  const nw = Math.max(1, Math.round(patch.w * sx));
+                  const nh = Math.max(1, Math.round(patch.h * sy));
+                  histBlob = await blobStretched(histBlob, nw, nh);
+                  patch = {
+                    x: Math.round((patch.x || 0) * sx),
+                    y: Math.round((patch.y || 0) * sy),
+                    w: nw,
+                    h: nh
+                  };
+                } else {
+                  histBlob = await blobStretched(histBlob, img.w, img.h);
+                }
                 rasterRef = 'edits/' + id + '-hist-' + hi + '.png';
-                parts.push({ name: rasterRef, blob: step.rasterBlob });
+                parts.push({ name: rasterRef, blob: histBlob });
               }
               undoMeta.push({
                 shapes,
                 raster: rasterRef,
-                patch: step.patch || null
+                patch
               });
             }
             editPayload.drawHistory = { undo: undoMeta };
@@ -347,6 +385,7 @@
             selected: !!meta.selected,
             projectId
           };
+          if (App.Preview && App.Preview.attach) App.Preview.attach(img);
 
           let editJson = null;
           if (meta.edit) {
@@ -402,7 +441,10 @@
               });
             }
             try {
-              await App.Draw.hydrateUndoFromDisk(img, histEntries);
+              await App.Draw.hydrateUndoFromDisk(img, histEntries, {
+                sourceW: (editJson && editJson.rasterW) || img.w,
+                sourceH: (editJson && editJson.rasterH) || img.h
+              });
             } catch (e) {
               console.warn('hydrate draw history', meta.edit, e);
             }
