@@ -545,15 +545,21 @@
     return out;
   }
 
-  async function restoreSession() {
+  async function restoreSession(opts) {
+    const onProgress = (opts && typeof opts.onProgress === 'function') ? opts.onProgress : function () {};
     if (!available || !db) return false;
     restoring = true;
+    let skipped = 0;
     try {
+      onProgress({ phase: 'read', detail: '正在读取本地工程…' });
       const imageRecords = await getAll('images');
       const session = await getOne('session', SESSION_KEY);
       const projects = normalizeProjects(session && session.projects);
 
       if (!imageRecords.length && !projects.length) return false;
+
+      const total = imageRecords.length;
+      onProgress({ phase: 'fonts', detail: '正在加载字体…', total: total || undefined, current: total ? 0 : undefined });
 
       const fontRecords = await getAll('fonts');
       for (const f of fontRecords) {
@@ -567,7 +573,15 @@
 
       const projectIds = new Set(projects.map(p => p.id));
       const images = [];
-      for (const rec of imageRecords) {
+      for (let i = 0; i < imageRecords.length; i++) {
+        const rec = imageRecords[i];
+        onProgress({
+          phase: 'image',
+          current: i + 1,
+          total,
+          detail: rec.name || ('第 ' + (i + 1) + ' 张'),
+          skipped
+        });
         try {
           const img = await loadImageFromBlob(rec);
           if (img.projectId && !projectIds.has(img.projectId)) img.projectId = null;
@@ -575,7 +589,6 @@
           if (edit) {
             img.texts = JSON.parse(JSON.stringify(edit.texts || []));
             if (edit.draw) {
-              // tool/color/sizes 已改为全局 drawPrefs；旧字段仅兼容，不覆盖偏好
               img.draw.selectedShapeId = edit.draw.selectedShapeId || null;
             }
             img.draw.shapes = JSON.parse(JSON.stringify(edit.shapes || []));
@@ -591,7 +604,9 @@
           images.push(img);
         } catch (e) {
           console.warn('skip image', rec.name, e);
+          skipped++;
         }
+        await new Promise(r => setTimeout(r, 0));
       }
 
       if (!images.length && !projects.length) return false;
@@ -623,7 +638,7 @@
         App.Editor.syncPropsUI();
       }
 
-      return true;
+      return skipped ? { restored: true, skipped } : true;
     } finally {
       restoring = false;
     }

@@ -59,7 +59,7 @@
 
 **方式一（在线，推荐）**：打开 [https://simple-comic-text-embedding-tool.pages.dev/](https://simple-comic-text-embedding-tool.pages.dev/) 即可使用。
 
-**方式二（本地）**：直接双击打开 `双击我开始嵌字.html`（与 `index.html` 内容相同）
+**方式二（本地）**：直接双击打开 `index.html`
 
 **方式三（本地静态服务）**：
 
@@ -86,7 +86,7 @@ python -m http.server 8080
 npx wrangler pages deploy . --project-name=simple-comic-text-embedding-tool
 ```
 
-> ⚠️ 注意：请保持 `css/`、`js/`、`字体样式/`、`index.html` 的相对目录结构不变；字体路径相对于 HTML 入口解析。修改入口页时请同步更新 `index.html` 与 `双击我开始嵌字.html`。
+> ⚠️ 注意：请保持 `css/`、`js/`、`字体样式/`、`index.html` 的相对目录结构不变；字体路径相对于 HTML 入口解析。
 
 ---
 
@@ -126,8 +126,7 @@ npx wrangler pages deploy . --project-name=simple-comic-text-embedding-tool
 
 ```
 image-text-tool-main/
-├── index.html                 # Web 入口（Cloudflare Pages 等）
-├── 双击我开始嵌字.html          # 本地双击入口（与 index.html 相同）
+├── index.html                 # 入口（在线部署与本地双击）
 ├── .wranglerignore            # Wrangler CLI 部署时排除 .git 等
 ├── css/
 │   ├── style.css          # 样式入口（@import 汇总）

@@ -59,12 +59,42 @@
     App.ShapePresets.bindShapePresetEvents();
 
     let restored = false;
+    let restoreSkipped = 0;
     if (storageOk) {
+      if (App.UI) {
+        App.UI.showJobProgress({ title: '正在恢复工程', detail: '正在读取本地工程…' });
+        App.UI.setIntakeLocked(true);
+      }
       try {
-        restored = await App.Storage.restoreSession();
+        const result = await App.Storage.restoreSession({
+          onProgress(p) {
+            if (!App.UI || !App.UI.updateJobProgress) return;
+            if (p.phase === 'image' && p.total) {
+              App.UI.updateJobProgress({
+                current: p.current,
+                total: p.total,
+                detail: p.detail,
+                skipped: p.skipped
+              });
+            } else {
+              App.UI.updateJobProgress({ detail: p.detail });
+            }
+          }
+        });
+        if (result && typeof result === 'object') {
+          restored = true;
+          restoreSkipped = result.skipped || 0;
+        } else {
+          restored = !!result;
+        }
       } catch (e) {
         console.error('restore failed', e);
         toast('恢复上次进度失败', 3200);
+      } finally {
+        if (App.UI) {
+          App.UI.hideJobProgress();
+          App.UI.setIntakeLocked(false);
+        }
       }
     }
 
@@ -78,7 +108,11 @@
     State.loadTeamMode();
     if (App.ProjectIO) App.ProjectIO.syncExportLabels();
 
-    if (restored) toast('已恢复上次工作进度');
+    if (restored) {
+      toast(restoreSkipped
+        ? '已恢复上次工作进度（跳过 ' + restoreSkipped + ' 张）'
+        : '已恢复上次工作进度');
+    }
 
     if (storageOk) {
       setTimeout(() => {
@@ -100,11 +134,12 @@
       });
     }
 
-    if (projectImportInput) {
+      if (projectImportInput) {
       projectImportInput.addEventListener('change', async () => {
         const file = projectImportInput.files && projectImportInput.files[0];
         projectImportInput.value = '';
         if (!file) return;
+        if (App.UI && App.UI.isIntakeLocked && App.UI.isIntakeLocked()) return;
         try {
           await App.ProjectIO.importZip(file);
         } catch (err) {
@@ -117,6 +152,7 @@
     window.addEventListener('dragover', e => e.preventDefault());
     window.addEventListener('drop', async e => {
       e.preventDefault();
+      if (App.UI && App.UI.isIntakeLocked && App.UI.isIntakeLocked()) return;
       const files = [...e.dataTransfer.files];
       const imgs = files.filter(f => f.type.startsWith('image/'));
       const zips = files.filter(f => /\.zip$/i.test(f.name));

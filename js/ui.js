@@ -162,6 +162,86 @@
     if (modal && typeof modal.close === 'function' && modal.open) modal.close();
   }
 
+  const EMPTY_SIDE_HTML = '还没有图片<br>点上方「上传图片」或「导入工程」<br>也可把文件拖进窗口';
+  let intakeLocked = false;
+
+  function isIntakeLocked() {
+    return intakeLocked;
+  }
+
+  function setIntakeLocked(on) {
+    intakeLocked = !!on;
+    document.body.classList.toggle('intake-locked', intakeLocked);
+    document.body.setAttribute('aria-busy', intakeLocked ? 'true' : 'false');
+  }
+
+  function setProgressIndeterminate(bar) {
+    if (!bar) return;
+    bar.removeAttribute('value');
+    bar.removeAttribute('max');
+  }
+
+  function showJobProgress(opts) {
+    opts = opts || {};
+    const {
+      jobProgress, jobProgressTitle, jobProgressDetail, jobProgressBar, jobProgressCount, emptySide
+    } = App.Dom;
+    if (jobProgressTitle) jobProgressTitle.textContent = opts.title || '正在处理';
+    if (jobProgressDetail) jobProgressDetail.textContent = opts.detail || '';
+    if (jobProgressCount) {
+      jobProgressCount.hidden = true;
+      jobProgressCount.textContent = '';
+    }
+    setProgressIndeterminate(jobProgressBar);
+    if (emptySide) emptySide.innerHTML = opts.title || '正在处理';
+    if (jobProgress) jobProgress.hidden = false;
+  }
+
+  function updateJobProgress(opts) {
+    opts = opts || {};
+    const {
+      jobProgress, jobProgressTitle, jobProgressDetail, jobProgressBar, jobProgressCount, emptySide
+    } = App.Dom;
+    if (jobProgress && jobProgress.hidden) jobProgress.hidden = false;
+    if (opts.title && jobProgressTitle) jobProgressTitle.textContent = opts.title;
+    if (opts.detail != null && jobProgressDetail) jobProgressDetail.textContent = opts.detail;
+    const total = opts.total;
+    const current = opts.current;
+    const hasTotal = typeof total === 'number' && total > 0 && typeof current === 'number';
+    if (hasTotal && jobProgressBar) {
+      jobProgressBar.max = total;
+      jobProgressBar.value = Math.max(0, Math.min(total, current));
+    } else if (jobProgressBar && total == null && current == null) {
+      setProgressIndeterminate(jobProgressBar);
+    }
+    if (jobProgressCount) {
+      if (hasTotal) {
+        let text = current + ' / ' + total;
+        if (opts.skipped) text += '（跳过 ' + opts.skipped + '）';
+        jobProgressCount.textContent = text;
+        jobProgressCount.hidden = false;
+      } else {
+        jobProgressCount.hidden = true;
+      }
+    }
+    if (emptySide) {
+      const title = (jobProgressTitle && jobProgressTitle.textContent) || '正在处理';
+      emptySide.textContent = hasTotal ? (title + ' ' + current + '/' + total) : title;
+    }
+  }
+
+  function hideJobProgress() {
+    const { jobProgress, jobProgressDetail, jobProgressBar, jobProgressCount, emptySide } = App.Dom;
+    if (jobProgress) jobProgress.hidden = true;
+    if (jobProgressDetail) jobProgressDetail.textContent = '';
+    if (jobProgressCount) {
+      jobProgressCount.hidden = true;
+      jobProgressCount.textContent = '';
+    }
+    setProgressIndeterminate(jobProgressBar);
+    if (emptySide) emptySide.innerHTML = EMPTY_SIDE_HTML;
+  }
+
   async function clearLocalCacheFromQuotaModal() {
     const { toast } = App.Utils;
     if (!confirm('将清除所有本地保存的图片、工程、编辑与上传字体。\n当前内存中的内容也会一并清空，是否继续？\n\n请确认已导出需要保留的备份。')) return;
@@ -314,6 +394,11 @@
     openHelpModal,
     closeHelpModal,
     openStorageQuotaModal,
-    closeStorageQuotaModal
+    closeStorageQuotaModal,
+    showJobProgress,
+    updateJobProgress,
+    hideJobProgress,
+    setIntakeLocked,
+    isIntakeLocked
   };
 })(window.App = window.App || {});

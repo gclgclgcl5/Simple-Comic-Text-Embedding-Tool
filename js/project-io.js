@@ -257,163 +257,199 @@
     return map;
   }
 
+  function reportImportProgress(payload) {
+    if (App.UI && App.UI.updateJobProgress) App.UI.updateJobProgress(payload);
+  }
+
   async function importZip(file) {
-    const buf = new Uint8Array(await file.arrayBuffer());
-    const entries = App.Zip.readZipEntries(buf);
-    const manifest = await parseManifestFromEntries(entries);
-    if (!manifest) throw new Error('不是有效的嵌字工程包');
-
-    // fonts first
-    for (const f of (manifest.fonts || [])) {
-      if (!f || !f.family || !f.file) continue;
-      if (App.Fonts.isBundledFamily(f.family)) continue;
-      if (State.customFonts.includes(f.family)) continue;
-      const en = findEntry(entries, f.file);
-      if (!en) continue;
-      const data = await entryToUint8(en);
-      await App.Fonts.registerFont(f.family, data, {
-        fileName: f.file.split('/').pop(),
-        silent: true
-      });
+    if (App.UI && App.UI.setIntakeLocked) App.UI.setIntakeLocked(true);
+    if (App.UI && App.UI.showJobProgress) {
+      App.UI.showJobProgress({ title: '正在导入工程', detail: '正在读取压缩包…' });
     }
-    App.Fonts.refreshFontSelect();
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const entries = App.Zip.readZipEntries(buf);
+      const manifest = await parseManifestFromEntries(entries);
+      if (!manifest) throw new Error('不是有效的嵌字工程包');
 
-    const projectMap = ensureProjectMapping(manifest.projects);
-    let imported = 0;
-    let selectId = null;
-
-    for (const meta of (manifest.images || [])) {
-      if (!meta || !meta.file) continue;
-      const imgEn = findEntry(entries, meta.file);
-      if (!imgEn) {
-        console.warn('missing image', meta.file);
-        continue;
-      }
-      const blob = await entryToBlob(imgEn, 'image/png');
-      const newId = State.uid();
-      let projectId = null;
-      if (meta.projectId && projectMap.has(meta.projectId)) {
-        projectId = projectMap.get(meta.projectId);
+      const imageMetas = manifest.images || [];
+      const total = imageMetas.length;
+      if (total) {
+        reportImportProgress({ current: 0, total, detail: '正在加载字体…' });
+      } else {
+        reportImportProgress({ detail: '正在加载字体…' });
       }
 
-      const scope = projectId
-        ? State.imagesInProject(projectId)
-        : State.rootImages();
-      const name = resolveUniqueName(scope, meta.name || ('image_' + newId));
+      for (const f of (manifest.fonts || [])) {
+        if (!f || !f.family || !f.file) continue;
+        if (App.Fonts.isBundledFamily(f.family)) continue;
+        if (State.customFonts.includes(f.family)) continue;
+        const en = findEntry(entries, f.file);
+        if (!en) continue;
+        const data = await entryToUint8(en);
+        await App.Fonts.registerFont(f.family, data, {
+          fileName: f.file.split('/').pop(),
+          silent: true
+        });
+      }
+      App.Fonts.refreshFontSelect();
 
-      const url = URL.createObjectURL(blob);
-      const el = await new Promise((resolve, reject) => {
-        const im = new Image();
-        im.onload = () => resolve(im);
-        im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片加载失败')); };
-        im.src = url;
-      });
+      const projectMap = ensureProjectMapping(manifest.projects);
+      let imported = 0;
+      let skipped = 0;
+      let selectId = null;
 
-      const img = {
-        id: newId,
-        name,
-        url,
-        imgEl: el,
-        w: meta.w || el.naturalWidth,
-        h: meta.h || el.naturalHeight,
-        sourceBlob: blob,
-        texts: [],
-        draw: App.Gallery.createDrawState(),
-        selected: !!meta.selected,
-        projectId
-      };
-
-      let editJson = null;
-      if (meta.edit) {
-        const editEn = findEntry(entries, meta.edit);
-        if (editEn) {
-          try {
-            editJson = JSON.parse(await entryToText(editEn));
-            img.texts = JSON.parse(JSON.stringify(editJson.texts || []));
-            if (editJson.draw) {
-              // tool/color/sizes 为全局偏好，工程包内旧字段不覆盖
-              img.draw.selectedShapeId = null;
-            }
-            img.draw.shapes = JSON.parse(JSON.stringify(editJson.shapes || []));
-          } catch (e) {
-            console.warn('edit parse', meta.edit, e);
-            editJson = null;
+      for (let i = 0; i < imageMetas.length; i++) {
+        const meta = imageMetas[i];
+        const label = (meta && meta.name) ? meta.name : ('第 ' + (i + 1) + ' 张');
+        reportImportProgress({ current: i + 1, total, detail: label, skipped });
+        try {
+          if (!meta || !meta.file) {
+            skipped++;
+            continue;
           }
-        }
-      }
-
-      if (meta.raster) {
-        const rEn = findEntry(entries, meta.raster);
-        if (rEn && App.Draw) {
-          try {
-            const rBlob = await entryToBlob(rEn, 'image/png');
-            const canvas = App.Draw.ensureRaster(img);
-            await App.Storage.restoreRaster(canvas, rBlob);
-            img.draw.hasRasterInk = true;
-          } catch (e) {
-            console.warn('raster restore', meta.raster, e);
+          const imgEn = findEntry(entries, meta.file);
+          if (!imgEn) {
+            console.warn('missing image', meta.file);
+            skipped++;
+            continue;
           }
-        }
-      }
+          const blob = await entryToBlob(imgEn, 'image/png');
+          const newId = State.uid();
+          let projectId = null;
+          if (meta.projectId && projectMap.has(meta.projectId)) {
+            projectId = projectMap.get(meta.projectId);
+          }
 
-      if (editJson && editJson.drawHistory && Array.isArray(editJson.drawHistory.undo) && App.Draw && App.Draw.hydrateUndoFromDisk) {
-        const histEntries = [];
-        for (let hi = 0; hi < editJson.drawHistory.undo.length; hi++) {
-          const step = editJson.drawHistory.undo[hi] || {};
-          let rasterBlobStep = null;
-          if (step.raster) {
-            const hEn = findEntry(entries, step.raster);
-            if (hEn) {
+          const scope = projectId
+            ? State.imagesInProject(projectId)
+            : State.rootImages();
+          const name = resolveUniqueName(scope, meta.name || ('image_' + newId));
+
+          const url = URL.createObjectURL(blob);
+          const el = await new Promise((resolve, reject) => {
+            const im = new Image();
+            im.onload = () => resolve(im);
+            im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片加载失败')); };
+            im.src = url;
+          });
+
+          const img = {
+            id: newId,
+            name,
+            url,
+            imgEl: el,
+            w: meta.w || el.naturalWidth,
+            h: meta.h || el.naturalHeight,
+            sourceBlob: blob,
+            texts: [],
+            draw: App.Gallery.createDrawState(),
+            selected: !!meta.selected,
+            projectId
+          };
+
+          let editJson = null;
+          if (meta.edit) {
+            const editEn = findEntry(entries, meta.edit);
+            if (editEn) {
               try {
-                rasterBlobStep = await entryToBlob(hEn, 'image/png');
+                editJson = JSON.parse(await entryToText(editEn));
+                img.texts = JSON.parse(JSON.stringify(editJson.texts || []));
+                if (editJson.draw) {
+                  img.draw.selectedShapeId = null;
+                }
+                img.draw.shapes = JSON.parse(JSON.stringify(editJson.shapes || []));
               } catch (e) {
-                console.warn('hist raster', step.raster, e);
+                console.warn('edit parse', meta.edit, e);
+                editJson = null;
               }
             }
           }
-          histEntries.push({
-            shapes: JSON.parse(JSON.stringify(step.shapes || [])),
-            rasterBlob: rasterBlobStep,
-            patch: step.patch || null
-          });
-        }
-        try {
-          await App.Draw.hydrateUndoFromDisk(img, histEntries);
-        } catch (e) {
-          console.warn('hydrate draw history', meta.edit, e);
-        }
-      }
 
-      State.images.push(img);
-      if (App.Storage.isAvailable()) {
-        await App.Storage.saveImageMeta(img);
-        const snap = App.Storage.snapshotEdit(img);
-        let rasterBlob = null;
-        if (img.draw.rasterCanvas && App.Storage.canvasHasInk(img.draw.rasterCanvas, img)) {
-          rasterBlob = await App.Storage.canvasToBlob(img.draw.rasterCanvas);
-        }
-        let drawHistory = null;
-        if (App.Draw && typeof App.Draw.serializeUndoForDisk === 'function') {
-          try {
-            const hist = await App.Draw.serializeUndoForDisk(img);
-            if (hist && Array.isArray(hist.undo) && hist.undo.length) drawHistory = hist;
-          } catch (e) {
-            console.warn('serialize draw history on import', e);
+          if (meta.raster) {
+            const rEn = findEntry(entries, meta.raster);
+            if (rEn && App.Draw) {
+              try {
+                const rBlob = await entryToBlob(rEn, 'image/png');
+                const canvas = App.Draw.ensureRaster(img);
+                await App.Storage.restoreRaster(canvas, rBlob);
+                img.draw.hasRasterInk = true;
+              } catch (e) {
+                console.warn('raster restore', meta.raster, e);
+              }
+            }
           }
-        }
-        await App.Storage.saveEdit(img.id, { ...snap, rasterBlob, drawHistory: drawHistory || null });
-      }
-      imported++;
-      if (!selectId) selectId = img.id;
-      await new Promise(r => setTimeout(r, 0));
-    }
 
-    if (App.Storage.isAvailable()) await App.Storage.saveSession();
-    App.Gallery.renderThumbs();
-    App.Gallery.syncSelectUI();
-    if (selectId) App.Editor.selectImage(selectId);
-    toast('✅ 已导入工程包（' + imported + ' 张）');
-    return imported;
+          if (editJson && editJson.drawHistory && Array.isArray(editJson.drawHistory.undo) && App.Draw && App.Draw.hydrateUndoFromDisk) {
+            const histEntries = [];
+            for (let hi = 0; hi < editJson.drawHistory.undo.length; hi++) {
+              const step = editJson.drawHistory.undo[hi] || {};
+              let rasterBlobStep = null;
+              if (step.raster) {
+                const hEn = findEntry(entries, step.raster);
+                if (hEn) {
+                  try {
+                    rasterBlobStep = await entryToBlob(hEn, 'image/png');
+                  } catch (e) {
+                    console.warn('hist raster', step.raster, e);
+                  }
+                }
+              }
+              histEntries.push({
+                shapes: JSON.parse(JSON.stringify(step.shapes || [])),
+                rasterBlob: rasterBlobStep,
+                patch: step.patch || null
+              });
+            }
+            try {
+              await App.Draw.hydrateUndoFromDisk(img, histEntries);
+            } catch (e) {
+              console.warn('hydrate draw history', meta.edit, e);
+            }
+          }
+
+          State.images.push(img);
+          if (App.Storage.isAvailable()) {
+            await App.Storage.saveImageMeta(img);
+            const snap = App.Storage.snapshotEdit(img);
+            let rasterBlob = null;
+            if (img.draw.rasterCanvas && App.Storage.canvasHasInk(img.draw.rasterCanvas, img)) {
+              rasterBlob = await App.Storage.canvasToBlob(img.draw.rasterCanvas);
+            }
+            let drawHistory = null;
+            if (App.Draw && typeof App.Draw.serializeUndoForDisk === 'function') {
+              try {
+                const hist = await App.Draw.serializeUndoForDisk(img);
+                if (hist && Array.isArray(hist.undo) && hist.undo.length) drawHistory = hist;
+              } catch (e) {
+                console.warn('serialize draw history on import', e);
+              }
+            }
+            await App.Storage.saveEdit(img.id, { ...snap, rasterBlob, drawHistory: drawHistory || null });
+          }
+          imported++;
+          if (!selectId) selectId = img.id;
+        } catch (e) {
+          console.warn('import image failed', meta && meta.file, e);
+          skipped++;
+        }
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      if (App.Storage.isAvailable()) await App.Storage.saveSession();
+      App.Gallery.renderThumbs();
+      App.Gallery.syncSelectUI();
+      if (selectId) App.Editor.selectImage(selectId);
+      if (skipped) {
+        toast('✅ 已导入工程包（' + imported + ' 张，跳过 ' + skipped + ' 张）', 4200);
+      } else {
+        toast('✅ 已导入工程包（' + imported + ' 张）');
+      }
+      return imported;
+    } finally {
+      if (App.UI && App.UI.hideJobProgress) App.UI.hideJobProgress();
+      if (App.UI && App.UI.setIntakeLocked) App.UI.setIntakeLocked(false);
+    }
   }
 
   App.ProjectIO = {

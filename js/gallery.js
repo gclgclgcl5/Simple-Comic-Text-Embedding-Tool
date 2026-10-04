@@ -409,6 +409,7 @@
   }
 
   function addFiles(files) {
+    if (App.UI && App.UI.isIntakeLocked && App.UI.isIntakeLocked()) return;
     const list = [...files];
     const projectId = State.currentProjectId || null;
     if (projectId) {

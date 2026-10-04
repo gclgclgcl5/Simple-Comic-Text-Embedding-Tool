@@ -406,6 +406,74 @@ body.gallery-collapsed.props-collapsed .app-main {
     var(--bg);
 }
 
+#jobProgress {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--overlay);
+  pointer-events: auto;
+}
+
+#jobProgress[hidden] {
+  display: none;
+}
+
+.job-progress-card {
+  width: min(360px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.job-progress-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.job-progress-detail {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 1.5em;
+}
+
+#jobProgressBar {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
+.job-progress-count {
+  font-size: 12px;
+  color: var(--muted2);
+  font-variant-numeric: tabular-nums;
+}
+
+body.intake-locked .gallery-intake,
+body.intake-locked #createProjectBtn,
+body.intake-locked #clearAllBtn,
+body.intake-locked #exportBtn,
+body.intake-locked #clearCacheBtn,
+body.intake-locked #dropzone,
+body.intake-locked #fontRemapBtn,
+body.intake-locked #termRemapBtn,
+body.intake-locked #comboRemapBtn {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
 #stageZoomShell {
   position: relative;
   flex: none;
